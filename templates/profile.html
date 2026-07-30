@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}My Profile{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <h1 class="section-title mb-4">
+                <i class="bi bi-person-circle"></i>
+                My Profile
+            </h1>
+
+            <div id="alert-container"></div>
+
+            <!-- Profile Card -->
+            <div class="card p-4 mb-4">
+                <h4 class="mb-4">Account Information</h4>
+
+                <form id="profile-form">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Username</label>
+                            <input type="text" class="form-control" id="username" readonly>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" readonly>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Member Since</label>
+                            <input type="text" class="form-control" id="created-at" readonly>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Stats Card -->
+            <div class="card p-4 mb-4">
+                <h4 class="mb-4">Your Stats</h4>
+
+                <div class="row text-center g-4">
+                    <div class="col-md-4">
+                        <div class="p-3 rounded" style="background: rgba(99, 102, 241, 0.2);">
+                            <h2 class="mb-1" id="favorite-count">0</h2>
+                            <p class="text-muted mb-0">Favorites</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 rounded" style="background: rgba(236, 72, 153, 0.2);">
+                            <h2 class="mb-1" id="interaction-count">0</h2>
+                            <p class="text-muted mb-0">Interactions</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 rounded" style="background: rgba(34, 197, 94, 0.2);">
+                            <h2 class="mb-1" id="top-genre">-</h2>
+                            <p class="text-muted mb-0">Top Genre</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Taste Vector Card -->
+            <div class="card p-4 mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4 class="mb-0">Your Taste Profile</h4>
+                    <button class="btn btn-outline-light btn-sm" id="reset-taste-btn">
+                        <i class="bi bi-arrow-counterclockwise me-2"></i>Reset
+                    </button>
+                </div>
+
+                <p class="text-muted mb-4">This shows your preference for each genre based on your activity. The more you like movies in a genre, the higher the score.</p>
+
+                <div id="taste-bars">
+                    <!-- Taste bars will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Preferred Genres Card -->
+            <div class="card p-4">
+                <h4 class="mb-4">Preferred Genres</h4>
+                <p class="text-muted mb-3">Update your preferred genres:</p>
+
+                <div class="genre-grid mb-4" id="genre-grid">
+                    <!-- Genres will be loaded here -->
+                </div>
+
+                <button class="btn btn-primary" id="save-genres-btn">
+                    <i class="bi bi-check-lg me-2"></i>Save Preferences
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentPreferredGenres = [];
+
+// Load profile
+async function loadProfile() {
+    try {
+        const response = await fetch('/api/user/profile');
+        const data = await response.json();
+        const profile = data.profile;
+
+        document.getElementById('username').value = profile.username;
+        document.getElementById('email').value = profile.email;
+        document.getElementById('created-at').value = new Date(profile.created_at).toLocaleDateString();
+        document.getElementById('favorite-count').textContent = profile.favorite_count;
+        document.getElementById('interaction-count').textContent = profile.interaction_count;
+
+        currentPreferredGenres = profile.preferred_genres || [];
+
+        // Load taste
+        loadTasteVector(profile.taste_vector);
+    } catch (error) {
+        console.error('Failed to load profile:', error);
+    }
+}
+
+// Load taste vector
+function loadTasteVector(tasteVector) {
+    const container = document.getElementById('taste-bars');
+
+    if (!tasteVector || Object.keys(tasteVector).length === 0) {
+        container.innerHTML = '<p class="text-muted">No taste data yet. Start liking movies!</p>';
+        document.getElementById('top-genre').textContent = '-';
+        return;
+    }
+
+    // Sort by value
+    const sorted = Object.entries(tasteVector).sort((a, b) => b[1] - a[1]);
+
+    // Set top genre
+    document.getElementById('top-genre').textContent = sorted[0][0];
+
+    // Create bars
+    container.innerHTML = sorted.slice(0, 10).map(([genre, value]) => {
+        const percentage = Math.round(value * 100);
+        const color = percentage > 70 ? 'var(--success-color)' : percentage > 50 ? 'var(--primary-color)' : 'var(--text-secondary)';
+
+        return `
+            <div class="mb-3">
+                <div class="d-flex justify-content-between mb-1">
+                    <span>${genre}</span>
+                    <span class="text-muted">${percentage}%</span>
+                </div>
+                <div class="progress" style="height: 8px; background: var(--card-bg);">
+                    <div class="progress-bar" style="width: ${percentage}%; background: ${color};"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Load genres
+async function loadGenres() {
+    try {
+        const response = await fetch('/api/genres');
+        const data = await response.json();
+
+        const grid = document.getElementById('genre-grid');
+        grid.innerHTML = data.genres.map(genre => {
+            const isChecked = currentPreferredGenres.includes(genre);
+            return `
+                <div>
+                    <input type="checkbox" class="genre-checkbox" id="genre-${genre}" value="${genre}" ${isChecked ? 'checked' : ''}>
+                    <label class="genre-label" for="genre-${genre}">${genre}</label>
+                </div>
+            `;
+        }).join('');
+    } catch (error) {
+        console.error('Failed to load genres:', error);
+    }
+}
+
+// Save genres
+document.getElementById('save-genres-btn').addEventListener('click', async function() {
+    const selectedGenres = Array.from(document.querySelectorAll('.genre-checkbox:checked')).map(cb => cb.value);
+
+    if (selectedGenres.length < 2) {
+        showAlert('Please select at least 2 genres.', 'danger');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/user/profile', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ preferred_genres: selectedGenres })
+        });
+
+        if (response.ok) {
+            showAlert('Preferences saved successfully!', 'success');
+            currentPreferredGenres = selectedGenres;
+        } else {
+            showAlert('Failed to save preferences.', 'danger');
+        }
+    } catch (error) {
+        console.error('Failed to save genres:', error);
+        showAlert('Network error. Please try again.', 'danger');
+    }
+});
+
+// Reset taste
+document.getElementById('reset-taste-btn').addEventListener('click', async function() {
+    if (!confirm('Are you sure you want to reset your taste profile? This will clear all learned preferences.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/user/taste/reset', { method: 'POST' });
+        if (response.ok) {
+            const data = await response.json();
+            loadTasteVector(data.taste_vector);
+            showAlert('Taste profile reset successfully!', 'success');
+        }
+    } catch (error) {
+        console.error('Failed to reset taste:', error);
+    }
+});
+
+// Show alert
+function showAlert(message, type) {
+    const container = document.getElementById('alert-container');
+    container.innerHTML = `
+        <div class="alert alert-${type} alert-dismissible fade show">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+}
+
+// Initialize
+loadProfile();
+loadGenres();
+</script>
+{% endblock %}

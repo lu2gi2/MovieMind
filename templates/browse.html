@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+
+{% block title %}Browse Movies{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <h1 class="section-title mb-4">
+        <i class="bi bi-collection"></i>
+        Browse Movies
+    </h1>
+
+    <!-- Filters -->
+    <div class="card p-4 mb-4">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Search</label>
+                <input type="text" class="form-control" id="search-input" placeholder="Search by title...">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Genre</label>
+                <select class="form-select" id="genre-filter">
+                    <option value="">All Genres</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Sort By</label>
+                <select class="form-select" id="sort-filter">
+                    <option value="popularity">Popularity</option>
+                    <option value="rating">Rating</option>
+                    <option value="year">Year</option>
+                    <option value="title">Title</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-primary w-100" id="search-btn">
+                    <i class="bi bi-search me-2"></i>Search
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Info -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <p class="text-muted mb-0">
+            Showing <span id="results-count">0</span> of <span id="total-count">0</span> movies
+        </p>
+    </div>
+
+    <!-- Movie Grid -->
+    <div class="row g-4" id="movies-grid">
+        <!-- Movies will be loaded here -->
+    </div>
+
+    <!-- Pagination -->
+    <nav class="mt-5" id="pagination-container">
+        <ul class="pagination justify-content-center" id="pagination">
+            <!-- Pagination will be loaded here -->
+        </ul>
+    </nav>
+</div>
+
+<!-- Movie Detail Modal (same as dashboard) -->
+<div class="modal fade" id="movieModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content bg-dark">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title" id="modal-title">Movie Title</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <img id="modal-poster" src="" class="img-fluid rounded" alt="Poster">
+                    </div>
+                    <div class="col-md-8">
+                        <p id="modal-overview" class="text-muted"></p>
+                        <div class="mb-3">
+                            <strong>Genres:</strong> <span id="modal-genres" class="text-muted"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Director:</strong> <span id="modal-director" class="text-muted"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Cast:</strong> <span id="modal-cast" class="text-muted"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Rating:</strong>
+                            <span class="text-warning"><i class="bi bi-star-fill"></i></span>
+                            <span id="modal-rating"></span>/10
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-danger" id="modal-favorite-btn">
+                    <i class="bi bi-heart me-2"></i>Add to Favorites
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentPage = 1;
+let currentMovieId = null;
+
+// Load genres for filter
+async function loadGenres() {
+    try {
+        const response = await fetch('/api/genres');
+        const data = await response.json();
+
+        const select = document.getElementById('genre-filter');
+        data.genres.forEach(genre => {
+            const option = document.createElement('option');
+            option.value = genre;
+            option.textContent = genre;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Failed to load genres:', error);
+    }
+}
+
+// Load movies
+async function loadMovies(page = 1) {
+    const search = document.getElementById('search-input').value;
+    const genre = document.getElementById('genre-filter').value;
+    const sort = document.getElementById('sort-filter').value;
+
+    let url = `/api/movies?page=${page}&per_page=12&sort=${sort}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (genre) url += `&genre=${encodeURIComponent(genre)}`;
+
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        displayMovies(data.movies);
+        updatePagination(data.page, data.pages, data.total);
+
+        document.getElementById('results-count').textContent = data.movies.length;
+        document.getElementById('total-count').textContent = data.total;
+
+        currentPage = page;
+    } catch (error) {
+        console.error('Failed to load movies:', error);
+    }
+}
+
+// Display movies
+function displayMovies(movies) {
+    const container = document.getElementById('movies-grid');
+
+    if (movies.length === 0) {
+        container.innerHTML = '<div class="col-12 text-center py-5"><p class="text-muted">No movies found.</p></div>';
+        return;
+    }
+
+    container.innerHTML = movies.map(movie => `
+        <div class="col-6 col-md-4 col-lg-3">
+            <div class="movie-card" onclick="showMovieDetail(${movie.movie_id})">
+                <img src="${movie.poster_url || 'https://via.placeholder.com/300x450?text=No+Poster'}"
+                     class="poster" alt="${movie.title}">
+                <div class="rating">
+                    <i class="bi bi-star-fill"></i> ${movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}
+                </div>
+                <button class="favorite-btn" onclick="event.stopPropagation(); toggleFavorite(${movie.movie_id}, this)">
+                    <i class="bi bi-heart"></i>
+                </button>
+                <div class="overlay">
+                    <div class="title">${movie.title}</div>
+                    <div class="year">${movie.release_year || 'N/A'} ${movie.genres ? '| ' + movie.genres[0] : ''}</div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Update pagination
+function updatePagination(currentPage, totalPages, totalItems) {
+    const container = document.getElementById('pagination');
+
+    if (totalPages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+
+    // Previous button
+    html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+        <a class="page-link bg-dark text-light border-secondary" href="#" onclick="loadMovies(${currentPage - 1}); return false;">Previous</a>
+    </li>`;
+
+    // Page numbers
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
+
+    if (startPage > 1) {
+        html += `<li class="page-item"><a class="page-link bg-dark text-light border-secondary" href="#" onclick="loadMovies(1); return false;">1</a></li>`;
+        if (startPage > 2) html += `<li class="page-item disabled"><span class="page-link bg-dark text-light border-secondary">...</span></li>`;
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+        html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+            <a class="page-link ${i === currentPage ? 'bg-primary border-primary' : 'bg-dark text-light border-secondary'}" href="#" onclick="loadMovies(${i}); return false;">${i}</a>
+        </li>`;
+    }
+
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) html += `<li class="page-item disabled"><span class="page-link bg-dark text-light border-secondary">...</span></li>`;
+        html += `<li class="page-item"><a class="page-link bg-dark text-light border-secondary" href="#" onclick="loadMovies(${totalPages}); return false;">${totalPages}</a></li>`;
+    }
+
+    // Next button
+    html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+        <a class="page-link bg-dark text-light border-secondary" href="#" onclick="loadMovies(${currentPage + 1}); return false;">Next</a>
+    </li>`;
+
+    container.innerHTML = html;
+}
+
+// Show movie detail
+async function showMovieDetail(movieId) {
+    currentMovieId = movieId;
+
+    try {
+        const response = await fetch(`/api/movies/${movieId}`);
+        const data = await response.json();
+        const movie = data.movie;
+
+        document.getElementById('modal-title').textContent = `${movie.title} (${movie.release_year || 'N/A'})`;
+        document.getElementById('modal-poster').src = movie.poster_url || 'https://via.placeholder.com/300x450?text=No+Poster';
+        document.getElementById('modal-overview').textContent = movie.overview || 'No overview available.';
+        document.getElementById('modal-genres').textContent = movie.genres ? movie.genres.join(', ') : 'N/A';
+        document.getElementById('modal-director').textContent = movie.director || 'N/A';
+        document.getElementById('modal-cast').textContent = movie.cast ? movie.cast.slice(0, 5).join(', ') : 'N/A';
+        document.getElementById('modal-rating').textContent = movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A';
+
+        const favBtn = document.getElementById('modal-favorite-btn');
+        if (movie.is_favorite) {
+            favBtn.innerHTML = '<i class="bi bi-heart-fill me-2"></i>Remove from Favorites';
+            favBtn.classList.add('active');
+        } else {
+            favBtn.innerHTML = '<i class="bi bi-heart me-2"></i>Add to Favorites';
+            favBtn.classList.remove('active');
+        }
+
+        const modal = new bootstrap.Modal(document.getElementById('movieModal'));
+        modal.show();
+    } catch (error) {
+        console.error('Failed to load movie details:', error);
+    }
+}
+
+// Toggle favorite
+async function toggleFavorite(movieId, btn) {
+    try {
+        const checkResponse = await fetch(`/api/user/favorites/${movieId}/check`);
+        const checkData = await checkResponse.json();
+
+        if (checkData.is_favorite) {
+            await fetch(`/api/user/favorites/${movieId}`, { method: 'DELETE' });
+            if (btn) btn.classList.remove('active');
+        } else {
+            await fetch('/api/user/favorites', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ movie_id: movieId })
+            });
+            if (btn) btn.classList.add('active');
+        }
+    } catch (error) {
+        console.error('Failed to toggle favorite:', error);
+    }
+}
+
+// Modal favorite button
+document.getElementById('modal-favorite-btn').addEventListener('click', async function() {
+    if (currentMovieId) {
+        await toggleFavorite(currentMovieId, null);
+        const isActive = this.classList.contains('active');
+        if (isActive) {
+            this.innerHTML = '<i class="bi bi-heart me-2"></i>Add to Favorites';
+            this.classList.remove('active');
+        } else {
+            this.innerHTML = '<i class="bi bi-heart-fill me-2"></i>Remove from Favorites';
+            this.classList.add('active');
+        }
+    }
+});
+
+// Search button
+document.getElementById('search-btn').addEventListener('click', () => loadMovies(1));
+
+// Enter key on search
+document.getElementById('search-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') loadMovies(1);
+});
+
+// Filter changes
+document.getElementById('genre-filter').addEventListener('change', () => loadMovies(1));
+document.getElementById('sort-filter').addEventListener('change', () => loadMovies(1));
+
+// Initialize
+loadGenres();
+loadMovies(1);
+</script>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}My Favorites{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <h1 class="section-title mb-4">
+        <i class="bi bi-heart-fill" style="color: var(--danger-color);"></i>
+        My Favorites
+    </h1>
+
+    <!-- Favorites Grid -->
+    <div class="row g-4" id="favorites-grid">
+        <!-- Loading placeholder -->
+        <div class="col-12 text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="text-center py-5 d-none">
+        <i class="bi bi-heart" style="font-size: 4rem; color: var(--text-secondary);"></i>
+        <h3 class="mt-4">No favorites yet</h3>
+        <p class="text-muted">Start liking movies to build your favorites list!</p>
+        <a href="/browse" class="btn btn-primary mt-3">
+            <i class="bi bi-collection me-2"></i>Browse Movies
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Load favorites
+async function loadFavorites() {
+    try {
+        const response = await fetch('/api/user/favorites');
+        const data = await response.json();
+
+        const container = document.getElementById('favorites-grid');
+        const emptyState = document.getElementById('empty-state');
+
+        if (data.favorites && data.favorites.length > 0) {
+            container.innerHTML = data.favorites.map(movie => `
+                <div class="col-6 col-md-4 col-lg-3" id="fav-${movie.movie_id}">
+                    <div class="movie-card">
+                        <img src="${movie.poster_url || 'https://via.placeholder.com/300x450?text=No+Poster'}"
+                             class="poster" alt="${movie.title}">
+                        <div class="rating">
+                            <i class="bi bi-star-fill"></i> ${movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}
+                        </div>
+                        <button class="favorite-btn active" onclick="removeFavorite(${movie.movie_id})">
+                            <i class="bi bi-heart-fill"></i>
+                        </button>
+                        <div class="overlay">
+                            <div class="title">${movie.title}</div>
+                            <div class="year">${movie.release_year || 'N/A'}</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            emptyState.classList.add('d-none');
+        } else {
+            container.innerHTML = '';
+            emptyState.classList.remove('d-none');
+        }
+    } catch (error) {
+        console.error('Failed to load favorites:', error);
+        document.getElementById('favorites-grid').innerHTML = '<p class="text-danger">Failed to load favorites.</p>';
+    }
+}
+
+// Remove favorite
+async function removeFavorite(movieId) {
+    try {
+        const response = await fetch(`/api/user/favorites/${movieId}`, { method: 'DELETE' });
+        if (response.ok) {
+            const element = document.getElementById(`fav-${movieId}`);
+            element.style.transition = 'opacity 0.3s';
+            element.style.opacity = '0';
+            setTimeout(() => {
+                element.remove();
+                // Check if empty
+                if (document.querySelectorAll('[id^="fav-"]').length === 0) {
+                    document.getElementById('empty-state').classList.remove('d-none');
+                }
+            }, 300);
+        }
+    } catch (error) {
+        console.error('Failed to remove favorite:', error);
+    }
+}
+
+// Initialize
+loadFavorites();
+</script>
+{% endblock %}

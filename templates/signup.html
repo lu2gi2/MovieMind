@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}Sign Up{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="auth-container" style="max-width: 550px;">
+        <h2><i class="bi bi-person-plus me-2"></i>Create Account</h2>
+
+        <!-- Progress Steps -->
+        <div class="signup-steps">
+            <div class="step active" id="step1-indicator">
+                <span class="step-number">1</span>
+                <span>Account</span>
+            </div>
+            <div class="step-line"></div>
+            <div class="step" id="step2-indicator">
+                <span class="step-number">2</span>
+                <span>Preferences</span>
+            </div>
+        </div>
+
+        <div id="signup-error" class="alert alert-danger d-none"></div>
+        <div id="signup-success" class="alert alert-success d-none"></div>
+
+        <!-- Step 1: Account Info -->
+        <div id="step1">
+            <form id="step1-form">
+                <div class="mb-3">
+                    <label for="username" class="form-label">Username</label>
+                    <input type="text" class="form-control" id="username" placeholder="Choose a username" required minlength="3">
+                </div>
+
+                <div class="mb-3">
+                    <label for="email" class="form-label">Email Address</label>
+                    <input type="email" class="form-control" id="email" placeholder="you@example.com" required>
+                </div>
+
+                <div class="mb-4">
+                    <label for="password" class="form-label">Password</label>
+                    <input type="password" class="form-control" id="password" placeholder="At least 6 characters" required minlength="6">
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">
+                    Next: Choose Genres <i class="bi bi-arrow-right ms-2"></i>
+                </button>
+            </form>
+        </div>
+
+        <!-- Step 2: Genre Preferences -->
+        <div id="step2" class="d-none">
+            <p class="text-muted mb-4">Select your favorite genres (at least 2):</p>
+
+            <div class="genre-grid mb-4" id="genre-grid">
+                <!-- Genres will be loaded dynamically -->
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-light flex-grow-1" id="back-btn">
+                    <i class="bi bi-arrow-left me-2"></i>Back
+                </button>
+                <button type="button" class="btn btn-primary flex-grow-1" id="signup-btn" disabled>
+                    <span class="btn-text">Create Account</span>
+                    <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+                </button>
+            </div>
+        </div>
+
+        <p class="text-center text-muted mt-4 mb-0">
+            Already have an account? <a href="/login" class="text-primary">Login</a>
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let selectedGenres = [];
+let accountData = {};
+
+// Load genres
+async function loadGenres() {
+    try {
+        const response = await fetch('/api/genres');
+        const data = await response.json();
+
+        const grid = document.getElementById('genre-grid');
+        grid.innerHTML = data.genres.map(genre => `
+            <div>
+                <input type="checkbox" class="genre-checkbox" id="genre-${genre}" value="${genre}">
+                <label class="genre-label" for="genre-${genre}">${genre}</label>
+            </div>
+        `).join('');
+
+        // Add event listeners
+        document.querySelectorAll('.genre-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', updateSelectedGenres);
+        });
+    } catch (error) {
+        console.error('Failed to load genres:', error);
+    }
+}
+
+function updateSelectedGenres() {
+    selectedGenres = Array.from(document.querySelectorAll('.genre-checkbox:checked'))
+        .map(cb => cb.value);
+
+    const signupBtn = document.getElementById('signup-btn');
+    signupBtn.disabled = selectedGenres.length < 2;
+}
+
+// Step 1: Account info
+document.getElementById('step1-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    accountData = {
+        username: document.getElementById('username').value,
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value
+    };
+
+    // Move to step 2
+    document.getElementById('step1').classList.add('d-none');
+    document.getElementById('step2').classList.remove('d-none');
+    document.getElementById('step1-indicator').classList.remove('active');
+    document.getElementById('step1-indicator').classList.add('completed');
+    document.getElementById('step2-indicator').classList.add('active');
+});
+
+// Back button
+document.getElementById('back-btn').addEventListener('click', function() {
+    document.getElementById('step2').classList.add('d-none');
+    document.getElementById('step1').classList.remove('d-none');
+    document.getElementById('step2-indicator').classList.remove('active');
+    document.getElementById('step1-indicator').classList.remove('completed');
+    document.getElementById('step1-indicator').classList.add('active');
+});
+
+// Sign up
+document.getElementById('signup-btn').addEventListener('click', async function() {
+    const btn = this;
+    const btnText = btn.querySelector('.btn-text');
+    const spinner = btn.querySelector('.spinner-border');
+    const errorDiv = document.getElementById('signup-error');
+    const successDiv = document.getElementById('signup-success');
+
+    // Show loading
+    btnText.textContent = 'Creating account...';
+    spinner.classList.remove('d-none');
+    btn.disabled = true;
+    errorDiv.classList.add('d-none');
+
+    const data = {
+        ...accountData,
+        preferred_genres: selectedGenres
+    };
+
+    try {
+        const response = await fetch('/api/auth/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            successDiv.textContent = 'Account created! Redirecting...';
+            successDiv.classList.remove('d-none');
+            setTimeout(() => {
+                window.location.href = '/dashboard';
+            }, 1000);
+        } else {
+            errorDiv.textContent = result.error || 'Signup failed';
+            errorDiv.classList.remove('d-none');
+            btnText.textContent = 'Create Account';
+            spinner.classList.add('d-none');
+            btn.disabled = selectedGenres.length < 2;
+        }
+    } catch (error) {
+        errorDiv.textContent = 'Network error. Please try again.';
+        errorDiv.classList.remove('d-none');
+        btnText.textContent = 'Create Account';
+        spinner.classList.add('d-none');
+        btn.disabled = selectedGenres.length < 2;
+    }
+});
+
+// Initialize
+loadGenres();
+</script>
+{% endblock %}

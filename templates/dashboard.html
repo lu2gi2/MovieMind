@@ -1,0 +1,384 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Welcome Section -->
+    <div class="text-center mb-5">
+        <h1 class="mb-3">Hello, <span id="user-name">there</span>!</h1>
+        <p class="text-muted fs-5">How are you feeling today?</p>
+    </div>
+
+    <!-- Mood Selector -->
+    <div class="mood-selector" id="mood-selector">
+        <!-- Moods will be loaded dynamically -->
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loading" class="text-center py-5 d-none">
+        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-3 text-muted">Finding perfect movies for you...</p>
+    </div>
+
+    <!-- Recommendations Section -->
+    <section id="recommendations-section" class="mt-5 d-none">
+        <h2 class="section-title">
+            <i class="bi bi-stars"></i>
+            <span>Recommended for You</span>
+            <span id="mood-label" class="badge bg-primary ms-2" style="font-size: 0.9rem;"></span>
+        </h2>
+
+        <div class="row g-4" id="recommendations-grid">
+            <!-- Movie cards will be loaded here -->
+        </div>
+
+        <div class="text-center mt-4">
+            <button class="btn btn-outline-light" id="load-more-btn">
+                <i class="bi bi-arrow-clockwise me-2"></i>Load More
+            </button>
+        </div>
+    </section>
+
+    <!-- Popular Movies (shown before mood selection) -->
+    <section id="popular-section" class="mt-5">
+        <h2 class="section-title">
+            <i class="bi bi-fire"></i>
+            Popular Movies
+        </h2>
+        <p class="text-muted mb-4">Select a mood above to get personalized recommendations, or browse popular movies below.</p>
+
+        <div class="row g-4" id="popular-grid">
+            <!-- Popular movies will be loaded here -->
+        </div>
+    </section>
+</div>
+
+<!-- Movie Detail Modal -->
+<div class="modal fade" id="movieModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content bg-dark">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title" id="modal-title">Movie Title</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <img id="modal-poster" src="" class="img-fluid rounded" alt="Poster">
+                    </div>
+                    <div class="col-md-8">
+                        <p id="modal-overview" class="text-muted"></p>
+                        <div class="mb-3">
+                            <strong>Genres:</strong> <span id="modal-genres" class="text-muted"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Director:</strong> <span id="modal-director" class="text-muted"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Cast:</strong> <span id="modal-cast" class="text-muted"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Rating:</strong>
+                            <span class="text-warning"><i class="bi bi-star-fill"></i></span>
+                            <span id="modal-rating"></span>/10
+                        </div>
+                        <div id="modal-explanation" class="explanation-badge"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-danger" id="modal-favorite-btn">
+                    <i class="bi bi-heart me-2"></i><span>Add to Favorites</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentMood = null;
+let currentMovieId = null;
+
+// Load moods
+async function loadMoods() {
+    try {
+        const response = await fetch('/api/moods');
+        const data = await response.json();
+
+        const container = document.getElementById('mood-selector');
+        container.innerHTML = data.moods.map(mood => `
+            <button class="mood-btn" data-mood="${mood.id}" data-label="${mood.label}">
+                <span class="emoji">${mood.emoji}</span>
+                <span class="label">${mood.label}</span>
+            </button>
+        `).join('');
+
+        // Add click handlers
+        document.querySelectorAll('.mood-btn').forEach(btn => {
+            btn.addEventListener('click', () => selectMood(btn));
+        });
+    } catch (error) {
+        console.error('Failed to load moods:', error);
+    }
+}
+
+// Select mood and get recommendations
+async function selectMood(btn) {
+    // Update UI
+    document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    currentMood = btn.dataset.mood;
+    const moodLabel = btn.dataset.label;
+
+    // Show loading
+    document.getElementById('loading').classList.remove('d-none');
+    document.getElementById('popular-section').classList.add('d-none');
+    document.getElementById('recommendations-section').classList.add('d-none');
+
+    // Get recommendations
+    await loadRecommendations(currentMood, moodLabel);
+}
+
+// Load recommendations
+async function loadRecommendations(mood, moodLabel) {
+    try {
+        const response = await fetch(`/api/recommend?mood=${mood}&limit=12`);
+        const data = await response.json();
+
+        document.getElementById('loading').classList.add('d-none');
+
+        if (data.recommendations && data.recommendations.length > 0) {
+            document.getElementById('mood-label').textContent = moodLabel;
+            displayMovies(data.recommendations, 'recommendations-grid', true);
+            document.getElementById('recommendations-section').classList.remove('d-none');
+        } else {
+            alert('No recommendations found. Try selecting different genres in your profile.');
+        }
+    } catch (error) {
+        console.error('Failed to load recommendations:', error);
+        document.getElementById('loading').classList.add('d-none');
+        alert('Failed to load recommendations. Please try again.');
+    }
+}
+
+// Load popular movies
+async function loadPopularMovies() {
+    try {
+        const response = await fetch('/api/movies?sort=popularity&per_page=8');
+        const data = await response.json();
+
+        displayMovies(data.movies.map(m => ({...m, explanation: 'Popular choice'})), 'popular-grid', false);
+    } catch (error) {
+        console.error('Failed to load popular movies:', error);
+    }
+}
+
+// Display movie cards
+function displayMovies(movies, containerId, showExplanation = false) {
+    const container = document.getElementById(containerId);
+
+    container.innerHTML = movies.map(movie => `
+        <div class="col-6 col-md-4 col-lg-3">
+            <div class="movie-card" onclick="showMovieDetail(${movie.movie_id})">
+                <img src="${movie.poster_url || 'https://via.placeholder.com/300x450?text=No+Poster'}"
+                     class="poster" alt="${movie.title}">
+                <div class="rating">
+                    <i class="bi bi-star-fill"></i> ${movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}
+                </div>
+                <button class="favorite-btn" onclick="event.stopPropagation(); toggleFavorite(${movie.movie_id}, this)">
+                    <i class="bi bi-heart"></i>
+                </button>
+                <div class="overlay">
+                    <div class="title">${movie.title}</div>
+                    <div class="year">${movie.release_year || 'N/A'}</div>
+                    ${showExplanation && movie.explanation ? `<div class="explanation-badge">${movie.explanation}</div>` : ''}
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Show movie detail modal
+async function showMovieDetail(movieId) {
+    currentMovieId = movieId;
+
+    try {
+        const response = await fetch(`/api/movies/${movieId}`);
+        const data = await response.json();
+        const movie = data.movie;
+
+        document.getElementById('modal-title').textContent = `${movie.title} (${movie.release_year || 'N/A'})`;
+        document.getElementById('modal-poster').src = movie.poster_url || 'https://via.placeholder.com/300x450?text=No+Poster';
+        document.getElementById('modal-overview').textContent = movie.overview || 'No overview available.';
+        document.getElementById('modal-genres').textContent = movie.genres ? movie.genres.join(', ') : 'N/A';
+        document.getElementById('modal-director').textContent = movie.director || 'N/A';
+        document.getElementById('modal-cast').textContent = movie.cast ? movie.cast.slice(0, 5).join(', ') : 'N/A';
+        document.getElementById('modal-rating').textContent = movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A';
+
+        // Update favorite button
+        const favBtn = document.getElementById('modal-favorite-btn');
+        if (movie.is_favorite) {
+            favBtn.innerHTML = '<i class="bi bi-heart-fill me-2"></i>Remove from Favorites';
+            favBtn.classList.add('active');
+        } else {
+            favBtn.innerHTML = '<i class="bi bi-heart me-2"></i>Add to Favorites';
+            favBtn.classList.remove('active');
+        }
+
+        const modal = new bootstrap.Modal(document.getElementById('movieModal'));
+        modal.show();
+    } catch (error) {
+        console.error('Failed to load movie details:', error);
+    }
+}
+
+// Toggle favorite
+async function toggleFavorite(movieId, btn) {
+    try {
+        // Check current status
+        const checkResponse = await fetch(`/api/user/favorites/${movieId}/check`);
+        const checkData = await checkResponse.json();
+
+        if (checkData.is_favorite) {
+            // Remove from favorites
+            const response = await fetch(`/api/user/favorites/${movieId}`, { method: 'DELETE' });
+            if (response.ok) {
+                if (btn) btn.classList.remove('active');
+                showToast('Removed from favorites', 'info');
+            }
+        } else {
+            // Add to favorites
+            const response = await fetch('/api/user/favorites', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ movie_id: movieId })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                if (btn) btn.classList.add('active');
+
+                // Show taste update notification
+                if (data.taste_message) {
+                    showTasteUpdate(data.taste_message, data.changes);
+                } else {
+                    showToast('Added to favorites!', 'success');
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Failed to toggle favorite:', error);
+    }
+}
+
+// Show taste update notification
+function showTasteUpdate(message, changes) {
+    // Create detailed notification
+    let changesHtml = '';
+    if (changes && Object.keys(changes).length > 0) {
+        const changesList = Object.entries(changes).slice(0, 3).map(([genre, info]) => {
+            const arrow = info.change > 0 ? '&uarr;' : '&darr;';
+            const color = info.change > 0 ? '#22c55e' : '#ef4444';
+            return `<span style="color: ${color}">${genre} ${arrow}</span>`;
+        }).join(', ');
+        changesHtml = `<div class="small mt-1">${changesList}</div>`;
+    }
+
+    const toast = document.createElement('div');
+    toast.className = 'position-fixed bottom-0 end-0 p-3';
+    toast.style.zIndex = '9999';
+    toast.innerHTML = `
+        <div class="toast show" style="background: linear-gradient(135deg, #6366f1, #ec4899); color: white; min-width: 300px;">
+            <div class="toast-header" style="background: transparent; color: white; border: none;">
+                <i class="bi bi-graph-up-arrow me-2"></i>
+                <strong class="me-auto">Taste Updated!</strong>
+                <button type="button" class="btn-close btn-close-white" onclick="this.parentElement.parentElement.parentElement.remove()"></button>
+            </div>
+            <div class="toast-body">
+                <i class="bi bi-heart-fill me-2"></i>${message}
+                ${changesHtml}
+            </div>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 5000);
+}
+
+// Modal favorite button handler
+document.getElementById('modal-favorite-btn').addEventListener('click', async function() {
+    if (currentMovieId) {
+        await toggleFavorite(currentMovieId, null);
+
+        // Update button state
+        const isActive = this.classList.contains('active');
+        if (isActive) {
+            this.innerHTML = '<i class="bi bi-heart me-2"></i>Add to Favorites';
+            this.classList.remove('active');
+        } else {
+            this.innerHTML = '<i class="bi bi-heart-fill me-2"></i>Remove from Favorites';
+            this.classList.add('active');
+        }
+    }
+});
+
+// Toast notification
+function showToast(message, type = 'success') {
+    const bgColor = type === 'success' ? 'bg-success' : type === 'info' ? 'bg-info' : 'bg-primary';
+    const icon = type === 'success' ? 'check-circle' : type === 'info' ? 'info-circle' : 'heart';
+
+    const toast = document.createElement('div');
+    toast.className = 'position-fixed bottom-0 end-0 p-3';
+    toast.style.zIndex = '9999';
+    toast.innerHTML = `
+        <div class="toast show ${bgColor} text-white">
+            <div class="toast-body">
+                <i class="bi bi-${icon} me-2"></i>${message}
+            </div>
+        </div>
+    `;
+    document.body.appendChild(toast);
+
+    setTimeout(() => toast.remove(), 3000);
+}
+
+// Load more button
+document.getElementById('load-more-btn').addEventListener('click', async function() {
+    if (currentMood) {
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Loading...';
+
+        await loadRecommendations(currentMood, document.getElementById('mood-label').textContent);
+
+        this.disabled = false;
+        this.innerHTML = '<i class="bi bi-arrow-clockwise me-2"></i>Refresh';
+    }
+});
+
+// Load user info
+async function loadUserInfo() {
+    try {
+        const response = await fetch('/api/auth/check');
+        const data = await response.json();
+
+        if (data.authenticated) {
+            document.getElementById('user-name').textContent = data.user.username;
+        } else {
+            window.location.href = '/login';
+        }
+    } catch (error) {
+        console.error('Failed to check auth:', error);
+    }
+}
+
+// Initialize
+loadUserInfo();
+loadMoods();
+loadPopularMovies();
+</script>
+{% endblock %}
