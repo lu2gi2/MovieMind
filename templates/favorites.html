@@ -1,99 +1,44 @@
 {% extends "base.html" %}
-
-{% block title %}My Favorites{% endblock %}
+{% block title %}My list{% endblock %}
 
 {% block content %}
-<div class="container py-4">
-    <h1 class="section-title mb-4">
-        <i class="bi bi-heart-fill" style="color: var(--danger-color);"></i>
-        My Favorites
-    </h1>
-
-    <!-- Favorites Grid -->
-    <div class="row g-4" id="favorites-grid">
-        <!-- Loading placeholder -->
-        <div class="col-12 text-center py-5">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-        </div>
+<div class="wrap page">
+    <div class="page-head">
+        <div><p class="eyebrow">Where your taste comes from</p><h1 style="font-size:clamp(2.2rem,4vw,3.4rem);margin-top:12px">My <em>list</em></h1></div>
+        <p class="lede mono" id="tally" style="font-size:.9rem">&nbsp;</p>
     </div>
-
-    <!-- Empty State -->
-    <div id="empty-state" class="text-center py-5 d-none">
-        <i class="bi bi-heart" style="font-size: 4rem; color: var(--text-secondary);"></i>
-        <h3 class="mt-4">No favorites yet</h3>
-        <p class="text-muted">Start liking movies to build your favorites list!</p>
-        <a href="/browse" class="btn btn-primary mt-3">
-            <i class="bi bi-collection me-2"></i>Browse Movies
-        </a>
+    <div class="cards" id="grid"></div>
+    <div class="empty" id="empty" hidden>
+        <h3>Nothing here yet.</h3>
+        <p>Your spot on the map is still dead centre. Like a few films and it will start to lean.</p>
+        <a class="btn" href="/browse">Browse films</a>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-// Load favorites
-async function loadFavorites() {
-    try {
-        const response = await fetch('/api/user/favorites');
-        const data = await response.json();
-
-        const container = document.getElementById('favorites-grid');
-        const emptyState = document.getElementById('empty-state');
-
-        if (data.favorites && data.favorites.length > 0) {
-            container.innerHTML = data.favorites.map(movie => `
-                <div class="col-6 col-md-4 col-lg-3" id="fav-${movie.movie_id}">
-                    <div class="movie-card">
-                        <img src="${movie.poster_url || 'https://via.placeholder.com/300x450?text=No+Poster'}"
-                             class="poster" alt="${movie.title}">
-                        <div class="rating">
-                            <i class="bi bi-star-fill"></i> ${movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}
-                        </div>
-                        <button class="favorite-btn active" onclick="removeFavorite(${movie.movie_id})">
-                            <i class="bi bi-heart-fill"></i>
-                        </button>
-                        <div class="overlay">
-                            <div class="title">${movie.title}</div>
-                            <div class="year">${movie.release_year || 'N/A'}</div>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-            emptyState.classList.add('d-none');
-        } else {
-            container.innerHTML = '';
-            emptyState.classList.remove('d-none');
-        }
-    } catch (error) {
-        console.error('Failed to load favorites:', error);
-        document.getElementById('favorites-grid').innerHTML = '<p class="text-danger">Failed to load favorites.</p>';
-    }
+const $ = id => document.getElementById(id);
+function refresh() {
+    const n = $('grid').children.length;
+    $('tally').textContent = n ? `${n} film${n === 1 ? '' : 's'} shaping your taste` : '';
+    $('empty').hidden = n > 0;
 }
-
-// Remove favorite
-async function removeFavorite(movieId) {
-    try {
-        const response = await fetch(`/api/user/favorites/${movieId}`, { method: 'DELETE' });
-        if (response.ok) {
-            const element = document.getElementById(`fav-${movieId}`);
-            element.style.transition = 'opacity 0.3s';
-            element.style.opacity = '0';
-            setTimeout(() => {
-                element.remove();
-                // Check if empty
-                if (document.querySelectorAll('[id^="fav-"]').length === 0) {
-                    document.getElementById('empty-state').classList.remove('d-none');
-                }
-            }, 300);
-        }
-    } catch (error) {
-        console.error('Failed to remove favorite:', error);
-    }
-}
-
-// Initialize
-loadFavorites();
+(async () => {
+    const auth = await checkAuth();
+    if (!auth.authenticated) { location.href = '/login'; return; }
+    const { ok, data } = await json('/api/user/favorites');
+    if (!ok) { $('grid').innerHTML = ''; $('empty').hidden = false; return; }
+    MM.favs = new Set(data.favorites.map(m => m.movie_id));
+    $('grid').innerHTML = data.favorites.map((m, i) => cardHTML(m, { i })).join('');
+    bindCards($('grid'));
+    refresh();
+    // when a heart is switched off here, fade the card out of the list
+    document.addEventListener('taste:changed', () => {
+        [...$('grid').querySelectorAll('.heart')].forEach(h => {
+            if (!MM.favs.has(+h.dataset.id)) { const c = h.closest('.card'); c.style.transition = 'opacity 250ms, transform 250ms'; c.style.opacity = 0; c.style.transform = 'scale(.97)'; setTimeout(() => { c.remove(); refresh(); }, 260); }
+        });
+    });
+})();
 </script>
 {% endblock %}

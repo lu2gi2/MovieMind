@@ -23,7 +23,10 @@ class User(UserMixin, db.Model):
     preferred_format = db.Column(db.String(20))  # movies, series, both
 
     # Adaptive learning: taste vector (updated as user interacts)
-    taste_vector = db.Column(db.Text)  # JSON dict: {genre: weight}
+    taste_vector = db.Column(db.Text)  # JSON dict: {genre: weight}  (v1 genre profile)
+
+    # v2: centroid of liked-movie embeddings (JSON list of 384 floats)
+    taste_embedding = db.Column(db.Text)
 
     # Relationships
     favorites = db.relationship('UserFavorite', backref='user', lazy='dynamic',
@@ -68,6 +71,19 @@ class User(UserMixin, db.Model):
     def set_taste_vector(self, vector_dict):
         """Set taste vector from dict"""
         self.taste_vector = json.dumps(vector_dict)
+
+    def get_taste_embedding(self):
+        """Return the v2 taste centroid as a list of floats ([] if not set)"""
+        if not self.taste_embedding:
+            return []
+        try:
+            return json.loads(self.taste_embedding)
+        except json.JSONDecodeError:
+            return []
+
+    def set_taste_embedding(self, vector):
+        """Store the v2 taste centroid (iterable of floats)"""
+        self.taste_embedding = json.dumps([round(float(x), 6) for x in vector])
 
     def update_taste_vector(self, genres, alpha=0.2):
         """

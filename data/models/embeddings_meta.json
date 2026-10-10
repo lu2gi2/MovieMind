@@ -1,0 +1,33 @@
+{
+  "model": "all-MiniLM-L6-v2",
+  "n_movies": 4988,
+  "dim": 384,
+  "moods": [
+    "happy",
+    "sad",
+    "excited",
+    "relaxed",
+    "romantic",
+    "thrilled",
+    "nostalgic",
+    "adventurous",
+    "thoughtful",
+    "scared"
+  ],
+  "exemplar_counts": {
+    "happy": 617,
+    "sad": 403,
+    "excited": 535,
+    "relaxed": 481,
+    "romantic": 420,
+    "thrilled": 682,
+    "nostalgic": 500,
+    "adventurous": 345,
+    "thoughtful": 501,
+    "scared": 456
+  },
+  "n_clusters": 20,
+  "encode_seconds": 137.62,
+  "embedding_mb": 7.662,
+  "mood_vectors_kb": 15.36
+}

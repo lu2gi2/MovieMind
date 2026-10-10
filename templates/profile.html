@@ -1,94 +1,44 @@
 {% extends "base.html" %}
-
-{% block title %}My Profile{% endblock %}
+{% block title %}Profile{% endblock %}
 
 {% block content %}
-<div class="container py-4">
-    <div class="row">
-        <div class="col-lg-8 mx-auto">
-            <h1 class="section-title mb-4">
-                <i class="bi bi-person-circle"></i>
-                My Profile
-            </h1>
+<div class="wrap page">
+    <div class="page-head">
+        <div><p class="eyebrow">You</p><h1 style="font-size:clamp(2.2rem,4vw,3.4rem);margin-top:12px" id="who">Profile</h1></div>
+        <p class="lede mono" id="since" style="font-size:.9rem">&nbsp;</p>
+    </div>
+    <div id="alert" role="status"></div>
 
-            <div id="alert-container"></div>
+    <div class="bignums">
+        <div><b id="fav-count">0</b><span>Films on your list</span></div>
+        <div><b id="int-count">0</b><span>Interactions</span></div>
+        <div><b class="sm" id="top-genre">—</b><span>Leading genre</span></div>
+    </div>
 
-            <!-- Profile Card -->
-            <div class="card p-4 mb-4">
-                <h4 class="mb-4">Account Information</h4>
-
-                <form id="profile-form">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Username</label>
-                            <input type="text" class="form-control" id="username" readonly>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Email</label>
-                            <input type="email" class="form-control" id="email" readonly>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Member Since</label>
-                            <input type="text" class="form-control" id="created-at" readonly>
-                        </div>
-                    </div>
-                </form>
+    <div class="profile">
+        <div>
+            <div class="block">
+                <h3>Where your taste sits</h3>
+                <p class="muted" style="margin-bottom:16px;font-size:.95rem">Your taste is the centre of the films you’ve liked. These are the unseen films closest to that centre.</p>
+                <ol class="neigh" id="neigh"><li class="muted"><span></span>Like a few films and your centre will appear here.</li></ol>
             </div>
-
-            <!-- Stats Card -->
-            <div class="card p-4 mb-4">
-                <h4 class="mb-4">Your Stats</h4>
-
-                <div class="row text-center g-4">
-                    <div class="col-md-4">
-                        <div class="p-3 rounded" style="background: rgba(99, 102, 241, 0.2);">
-                            <h2 class="mb-1" id="favorite-count">0</h2>
-                            <p class="text-muted mb-0">Favorites</p>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="p-3 rounded" style="background: rgba(236, 72, 153, 0.2);">
-                            <h2 class="mb-1" id="interaction-count">0</h2>
-                            <p class="text-muted mb-0">Interactions</p>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="p-3 rounded" style="background: rgba(34, 197, 94, 0.2);">
-                            <h2 class="mb-1" id="top-genre">-</h2>
-                            <p class="text-muted mb-0">Top Genre</p>
-                        </div>
-                    </div>
-                </div>
+            <div class="block">
+                <h3>Genre lean</h3>
+                <div class="bars" id="bars"><p class="muted">Nothing yet.</p></div>
+                <p style="margin-top:24px"><button class="link-btn" id="reset-btn">Reset what the app has learned about me</button></p>
             </div>
-
-            <!-- Taste Vector Card -->
-            <div class="card p-4 mb-4">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h4 class="mb-0">Your Taste Profile</h4>
-                    <button class="btn btn-outline-light btn-sm" id="reset-taste-btn">
-                        <i class="bi bi-arrow-counterclockwise me-2"></i>Reset
-                    </button>
-                </div>
-
-                <p class="text-muted mb-4">This shows your preference for each genre based on your activity. The more you like movies in a genre, the higher the score.</p>
-
-                <div id="taste-bars">
-                    <!-- Taste bars will be loaded here -->
-                </div>
+        </div>
+        <div>
+            <div class="block">
+                <h3>Starting genres</h3>
+                <p class="muted" style="margin-bottom:16px;font-size:.95rem">These only seed your first suggestions. Pick at least two.</p>
+                <div class="chips" id="genre-grid" style="margin-bottom:24px"></div>
+                <button class="btn" id="save-btn">Save genres</button>
             </div>
-
-            <!-- Preferred Genres Card -->
-            <div class="card p-4">
-                <h4 class="mb-4">Preferred Genres</h4>
-                <p class="text-muted mb-3">Update your preferred genres:</p>
-
-                <div class="genre-grid mb-4" id="genre-grid">
-                    <!-- Genres will be loaded here -->
-                </div>
-
-                <button class="btn btn-primary" id="save-genres-btn">
-                    <i class="bi bi-check-lg me-2"></i>Save Preferences
-                </button>
+            <div class="block">
+                <h3>Account</h3>
+                <div class="field"><label for="username">Username</label><input class="input" id="username" readonly></div>
+                <div class="field"><label for="email">Email</label><input class="input" id="email" readonly></div>
             </div>
         </div>
     </div>
@@ -97,145 +47,50 @@
 
 {% block extra_js %}
 <script>
-let currentPreferredGenres = [];
+const $ = id => document.getElementById(id);
+let preferred = [];
+const say = (msg, ok = true) => { $('alert').innerHTML = `<div class="note ${ok ? 'note--ok' : ''}">${esc(msg)}</div>`; setTimeout(() => $('alert').innerHTML = '', 4000); };
 
-// Load profile
-async function loadProfile() {
-    try {
-        const response = await fetch('/api/user/profile');
-        const data = await response.json();
-        const profile = data.profile;
-
-        document.getElementById('username').value = profile.username;
-        document.getElementById('email').value = profile.email;
-        document.getElementById('created-at').value = new Date(profile.created_at).toLocaleDateString();
-        document.getElementById('favorite-count').textContent = profile.favorite_count;
-        document.getElementById('interaction-count').textContent = profile.interaction_count;
-
-        currentPreferredGenres = profile.preferred_genres || [];
-
-        // Load taste
-        loadTasteVector(profile.taste_vector);
-    } catch (error) {
-        console.error('Failed to load profile:', error);
-    }
+function bars(tv) {
+    const rows = Object.entries(tv || {}).sort((a, b) => b[1] - a[1]);
+    $('top-genre').textContent = rows.length ? rows[0][0] : '—';
+    $('bars').innerHTML = rows.length ? rows.slice(0, 8).map(([g, v]) =>
+        `<div class="bar-row"><span>${esc(g)}</span><div class="track"><i style="width:${Math.round(v * 100)}%"></i></div><span class="pct">${Math.round(v * 100)}</span></div>`).join('') : '<p class="muted">Nothing yet. Like a few films first.</p>';
 }
 
-// Load taste vector
-function loadTasteVector(tasteVector) {
-    const container = document.getElementById('taste-bars');
-
-    if (!tasteVector || Object.keys(tasteVector).length === 0) {
-        container.innerHTML = '<p class="text-muted">No taste data yet. Start liking movies!</p>';
-        document.getElementById('top-genre').textContent = '-';
-        return;
-    }
-
-    // Sort by value
-    const sorted = Object.entries(tasteVector).sort((a, b) => b[1] - a[1]);
-
-    // Set top genre
-    document.getElementById('top-genre').textContent = sorted[0][0];
-
-    // Create bars
-    container.innerHTML = sorted.slice(0, 10).map(([genre, value]) => {
-        const percentage = Math.round(value * 100);
-        const color = percentage > 70 ? 'var(--success-color)' : percentage > 50 ? 'var(--primary-color)' : 'var(--text-secondary)';
-
-        return `
-            <div class="mb-3">
-                <div class="d-flex justify-content-between mb-1">
-                    <span>${genre}</span>
-                    <span class="text-muted">${percentage}%</span>
-                </div>
-                <div class="progress" style="height: 8px; background: var(--card-bg);">
-                    <div class="progress-bar" style="width: ${percentage}%; background: ${color};"></div>
-                </div>
-            </div>
-        `;
-    }).join('');
+async function neighbours() {
+    const { data } = await json('/api/user/taste');
+    const n = data.taste_neighbours || [];
+    if (n.length) $('neigh').innerHTML = n.map(m => `<li><span class="t">${esc(m.title)}</span><span class="mono muted">${m.release_year || ''} · ${m.similarity.toFixed(2)}</span></li>`).join('');
 }
 
-// Load genres
-async function loadGenres() {
-    try {
-        const response = await fetch('/api/genres');
-        const data = await response.json();
-
-        const grid = document.getElementById('genre-grid');
-        grid.innerHTML = data.genres.map(genre => {
-            const isChecked = currentPreferredGenres.includes(genre);
-            return `
-                <div>
-                    <input type="checkbox" class="genre-checkbox" id="genre-${genre}" value="${genre}" ${isChecked ? 'checked' : ''}>
-                    <label class="genre-label" for="genre-${genre}">${genre}</label>
-                </div>
-            `;
-        }).join('');
-    } catch (error) {
-        console.error('Failed to load genres:', error);
-    }
+async function genres() {
+    const { data } = await json('/api/genres');
+    $('genre-grid').innerHTML = (data.genres || []).map(g => `<label class="chip"><input type="checkbox" value="${esc(g)}" ${preferred.includes(g) ? 'checked' : ''}><span>${esc(g)}</span></label>`).join('');
 }
 
-// Save genres
-document.getElementById('save-genres-btn').addEventListener('click', async function() {
-    const selectedGenres = Array.from(document.querySelectorAll('.genre-checkbox:checked')).map(cb => cb.value);
+(async () => {
+    const auth = await checkAuth();
+    if (!auth.authenticated) { location.href = '/login'; return; }
+    const { data } = await json('/api/user/profile'); const p = data.profile;
+    $('who').innerHTML = `${esc(p.username)}`;
+    $('since').textContent = 'Member since ' + new Date(p.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
+    $('username').value = p.username; $('email').value = p.email;
+    $('fav-count').textContent = p.favorite_count; $('int-count').textContent = p.interaction_count;
+    preferred = p.preferred_genres || [];
+    bars(p.taste_vector); neighbours(); genres();
 
-    if (selectedGenres.length < 2) {
-        showAlert('Please select at least 2 genres.', 'danger');
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/user/profile', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ preferred_genres: selectedGenres })
-        });
-
-        if (response.ok) {
-            showAlert('Preferences saved successfully!', 'success');
-            currentPreferredGenres = selectedGenres;
-        } else {
-            showAlert('Failed to save preferences.', 'danger');
-        }
-    } catch (error) {
-        console.error('Failed to save genres:', error);
-        showAlert('Network error. Please try again.', 'danger');
-    }
-});
-
-// Reset taste
-document.getElementById('reset-taste-btn').addEventListener('click', async function() {
-    if (!confirm('Are you sure you want to reset your taste profile? This will clear all learned preferences.')) {
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/user/taste/reset', { method: 'POST' });
-        if (response.ok) {
-            const data = await response.json();
-            loadTasteVector(data.taste_vector);
-            showAlert('Taste profile reset successfully!', 'success');
-        }
-    } catch (error) {
-        console.error('Failed to reset taste:', error);
-    }
-});
-
-// Show alert
-function showAlert(message, type) {
-    const container = document.getElementById('alert-container');
-    container.innerHTML = `
-        <div class="alert alert-${type} alert-dismissible fade show">
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    `;
-}
-
-// Initialize
-loadProfile();
-loadGenres();
+    $('save-btn').addEventListener('click', async () => {
+        const sel = [...document.querySelectorAll('#genre-grid input:checked')].map(i => i.value);
+        if (sel.length < 2) { say('Pick at least two genres.', false); return; }
+        const r = await json('/api/user/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ preferred_genres: sel }) });
+        say(r.ok ? 'Saved. Your next picks will start from there.' : 'That didn’t save. Try once more.', r.ok);
+    });
+    $('reset-btn').addEventListener('click', async () => {
+        if (!confirm('Reset your genre lean? Your list of liked films stays.')) return;
+        const r = await post('/api/user/taste/reset');
+        if (r.ok) { bars(r.data.taste_vector); say('Genre lean cleared.'); }
+    });
+})();
 </script>
 {% endblock %}

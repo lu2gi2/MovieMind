@@ -274,3 +274,23 @@ def update_user_taste(user_id, movie_id, interaction_type, rating=None):
         return {'status': 'updated'}
 
     return {'error': 'Invalid interaction type'}
+
+
+def refresh_embedding_taste(user_id, store=None):
+    """
+    v2 taste: unit centroid of the embeddings of every movie the user currently likes.
+
+    Always recomputed from the favourites table, so an unlike never has to "subtract"
+    a vector. A user with no likes gets the global mean embedding (cold start).
+    Returns the centroid as a NumPy array, or None if embeddings are not built.
+    """
+    from app.ml.embeddings import get_store
+    store = store or get_store()
+    user = User.query.get(user_id)
+    if store is None or user is None:
+        return None
+    liked = [f.movie_id for f in UserFavorite.query.filter_by(user_id=user_id).all()]
+    taste = store.centroid(liked)
+    user.set_taste_embedding(taste)
+    db.session.commit()
+    return taste

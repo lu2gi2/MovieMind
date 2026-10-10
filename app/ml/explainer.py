@@ -246,3 +246,62 @@ def generate_explanation(user_id, movie, similarity_score=0, mood=None):
     """
     explainer = RecommendationExplainer(user_id)
     return explainer.explain(movie, similarity_score, mood)
+
+
+# ---------------------------------------------------------------------------
+# v2: explanations computed from the embedding geometry (no random templates)
+# ---------------------------------------------------------------------------
+def geometric_explanation(store, row, taste, mood, lam, liked_rows, titles,
+                          rank_without_mood=None, rank_with_mood=None):
+    """
+    Explain one recommendation from vector relationships.
+
+        taste_match   = cos(user_taste, movie)
+        mood_effect   = cos(search_position, movie) - cos(user_taste, movie)
+        nearest_liked = argmax over liked movies of cos(movie, liked)
+
+    titles: dict movie_id -> title (used only to name the nearest liked movie).
+    """
+    import numpy as np
+    from app.ml.embeddings import unit
+
+    m = store.E[row]
+    taste_u = unit(taste)
+    pos = unit(store.search_position(taste_u, mood, lam))
+    taste_match = float(m @ taste_u)
+    mood_effect = float(m @ pos) - taste_match
+
+    nearest = None
+    if liked_rows:
+        sims = store.E[liked_rows] @ m
+        j = int(np.argmax(sims))
+        nearest = {'movie_id': int(store.ids[liked_rows[j]]),
+                   'title': titles.get(int(store.ids[liked_rows[j]])),
+                   'similarity': round(float(sims[j]), 3)}
+
+    moved = None
+    if rank_without_mood is not None and rank_with_mood is not None:
+        moved = int(rank_without_mood - rank_with_mood)   # >0 = moved up because of mood
+
+    parts = []
+    if nearest and nearest['title']:
+        parts.append(f"Close to {nearest['title']}, which you liked")
+    elif not liked_rows:
+        parts.append("Near the centre of the catalogue - like a few films to sharpen this")
+    if mood and lam > 0:
+        if moved and moved > 0:
+            parts.append(f"{mood} mood lifted it {moved} place{'s' if moved != 1 else ''}")
+        elif mood_effect > 0.005:
+            parts.append(f"nudged toward {mood}")
+        else:
+            parts.append(f"stays put under a {mood} nudge")
+    parts.append(f"taste match {taste_match:.2f}")
+
+    return {
+        'taste_match': round(taste_match, 3),
+        'mood_effect': round(mood_effect, 3),
+        'nearest_liked': nearest,
+        'rank_without_mood': rank_without_mood,
+        'rank_with_mood': rank_with_mood,
+        'text': ' · '.join(parts),
+    }

@@ -1,83 +1,43 @@
 {% extends "base.html" %}
-
-{% block title %}Login{% endblock %}
+{% block title %}Log in{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="auth-container">
-        <h2><i class="bi bi-box-arrow-in-right me-2"></i>Welcome Back</h2>
-
-        <div id="login-error" class="alert alert-danger d-none"></div>
-
-        <form id="login-form">
-            <div class="mb-3">
-                <label for="email" class="form-label">Email Address</label>
-                <input type="email" class="form-control" id="email" placeholder="you@example.com" required>
-            </div>
-
-            <div class="mb-4">
-                <label for="password" class="form-label">Password</label>
-                <input type="password" class="form-control" id="password" placeholder="Enter your password" required>
-            </div>
-
-            <button type="submit" class="btn btn-primary w-100 mb-3" id="login-btn">
-                <span class="btn-text">Login</span>
-                <span class="spinner-border spinner-border-sm d-none" role="status"></span>
-            </button>
+<div class="auth">
+    <aside class="auth-aside">
+        <div>
+            <p class="eyebrow" style="color:#CFC8B8">Welcome back</p>
+            <h2 style="margin-top:16px">Back to <em>your</em> spot on the map.</h2>
+        </div>
+        <svg class="vibe" id="side-vibe" aria-hidden="true"></svg>
+        <p>Your likes are still where you left them. Pick up the walk.</p>
+    </aside>
+    <div class="auth-main">
+        <form class="auth-form" id="login-form" novalidate>
+            <h1>Log in</h1>
+            <p class="lede">Use the email you joined with.</p>
+            <div id="login-error" class="note" role="alert" hidden></div>
+            <div class="field"><label for="email">Email</label><input class="input" type="email" id="email" autocomplete="email" placeholder="you@example.com" required></div>
+            <div class="field"><label for="password">Password</label><input class="input" type="password" id="password" autocomplete="current-password" required></div>
+            <button type="submit" class="btn btn--block" id="login-btn">Log in</button>
+            <p class="alt">New here? <a href="/signup">Find your spot</a></p>
         </form>
-
-        <p class="text-center text-muted mb-0">
-            Don't have an account? <a href="/signup" class="text-primary">Sign up</a>
-        </p>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-document.getElementById('login-form').addEventListener('submit', async function(e) {
+drawVibe(document.getElementById('side-vibe'), { lam: 0.55, mood: 'nostalgic' });
+document.getElementById('login-form').addEventListener('submit', async e => {
     e.preventDefault();
-
-    const btn = document.getElementById('login-btn');
-    const btnText = btn.querySelector('.btn-text');
-    const spinner = btn.querySelector('.spinner-border');
-    const errorDiv = document.getElementById('login-error');
-
-    // Show loading
-    btnText.textContent = 'Logging in...';
-    spinner.classList.remove('d-none');
-    btn.disabled = true;
-    errorDiv.classList.add('d-none');
-
-    const data = {
-        email: document.getElementById('email').value,
-        password: document.getElementById('password').value
-    };
-
+    const btn = document.getElementById('login-btn'), err = document.getElementById('login-error');
+    btn.disabled = true; btn.textContent = 'Finding your spot…'; err.hidden = true;
     try {
-        const response = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-            // Redirect to dashboard
-            window.location.href = '/dashboard';
-        } else {
-            errorDiv.textContent = result.error || 'Login failed';
-            errorDiv.classList.remove('d-none');
-        }
-    } catch (error) {
-        errorDiv.textContent = 'Network error. Please try again.';
-        errorDiv.classList.remove('d-none');
-    } finally {
-        btnText.textContent = 'Login';
-        spinner.classList.add('d-none');
-        btn.disabled = false;
-    }
+        const { ok, data } = await post('/api/auth/login', { email: document.getElementById('email').value, password: document.getElementById('password').value });
+        if (ok) { location.href = '/dashboard'; return; }
+        err.textContent = data.error || 'That email and password don’t match. Give it another go.'; err.hidden = false;
+    } catch (x) { err.textContent = 'Couldn’t reach the server. Check your connection and retry.'; err.hidden = false; }
+    btn.disabled = false; btn.textContent = 'Log in';
 });
 </script>
 {% endblock %}

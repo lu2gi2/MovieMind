@@ -6,6 +6,7 @@ from flask_login import login_required, current_user
 from app import db
 from app.models import Movie, UserFavorite
 from app.ml.recommender import get_recommender
+from app.ml.embedding_recommender import DEFAULT_LAMBDA
 
 recommendation_bp = Blueprint('recommendation', __name__)
 
@@ -17,6 +18,7 @@ def get_recommendations():
     Get personalized recommendations for current user
 
     Query params:
+        lambda: Mood strength 0.0-1.0 (default 0.3)
         mood: Optional mood string (happy, sad, excited, relaxed, romantic, thrilled, nostalgic, adventurous, thoughtful, scared)
         limit: Number of recommendations (default 10, max 50)
 
@@ -28,20 +30,36 @@ def get_recommendations():
     limit = request.args.get('limit', 10, type=int)
     limit = min(max(limit, 1), 50)  # Clamp between 1 and 50
 
+    # lambda: how far the mood moves the search away from the user's taste (0 = pure taste, 1 = pure mood)
+    lam_raw = request.args.get('lambda', DEFAULT_LAMBDA)
+    try:
+        lam = float(lam_raw)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'lambda must be a number between 0 and 1'}), 400
+    if not 0.0 <= lam <= 1.0:
+        return jsonify({'error': 'lambda must be between 0 and 1'}), 400
+
     try:
         recommender = get_recommender()
-        recommendations = recommender.get_recommendations(
-            user_id=current_user.user_id,
-            mood=mood,
-            limit=limit
-        )
+        if getattr(recommender, 'engine', '') == 'v2-embedding':
+            recommendations = recommender.get_recommendations(
+                user_id=current_user.user_id, mood=mood, limit=limit, lam=lam
+            )
+        else:  # v1 fallback (no embeddings built)
+            recommendations = recommender.get_recommendations(
+                user_id=current_user.user_id, mood=mood, limit=limit
+            )
 
         return jsonify({
             'recommendations': recommendations,
             'count': len(recommendations),
-            'mood': mood
+            'mood': mood,
+            'lambda': lam,
+            'engine': getattr(recommender, 'engine', 'v1-tfidf')
         }), 200
 
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
         return jsonify({'error': f'Failed to get recommendations: {str(e)}'}), 500
 
@@ -218,16 +236,16 @@ def get_moods():
         List of mood options with descriptions
     """
     moods = [
-        {'id': 'happy', 'label': 'Happy', 'emoji': '😊', 'description': 'Comedy, Animation, Family'},
-        {'id': 'sad', 'label': 'Sad', 'emoji': '😢', 'description': 'Drama, Romance'},
-        {'id': 'excited', 'label': 'Excited', 'emoji': '🤩', 'description': 'Action, Adventure, Thriller'},
-        {'id': 'relaxed', 'label': 'Relaxed', 'emoji': '😌', 'description': 'Comedy, Family, Documentary'},
-        {'id': 'romantic', 'label': 'Romantic', 'emoji': '💕', 'description': 'Romance, Drama'},
-        {'id': 'thrilled', 'label': 'Thrilled', 'emoji': '😱', 'description': 'Thriller, Horror, Mystery'},
-        {'id': 'nostalgic', 'label': 'Nostalgic', 'emoji': '🥹', 'description': 'Drama, Family, Animation'},
-        {'id': 'adventurous', 'label': 'Adventurous', 'emoji': '🗺️', 'description': 'Adventure, Action, Fantasy'},
-        {'id': 'thoughtful', 'label': 'Thoughtful', 'emoji': '🤔', 'description': 'Documentary, Drama, Mystery'},
-        {'id': 'scared', 'label': 'Scared', 'emoji': '👻', 'description': 'Horror, Thriller'}
+        {'id': 'happy', 'label': 'Happy', 'description': 'Warm, funny, easy company'},
+        {'id': 'sad', 'label': 'Sad', 'description': 'Quiet, aching, human'},
+        {'id': 'excited', 'label': 'Excited', 'description': 'Fast, loud, high stakes'},
+        {'id': 'relaxed', 'label': 'Relaxed', 'description': 'Slow, gentle, low pressure'},
+        {'id': 'romantic', 'label': 'Romantic', 'description': 'Love stories of every shape'},
+        {'id': 'thrilled', 'label': 'Thrilled', 'description': 'Tense, clever, edge of the seat'},
+        {'id': 'nostalgic', 'label': 'Nostalgic', 'description': 'Growing up, other decades'},
+        {'id': 'adventurous', 'label': 'Adventurous', 'description': 'Journeys, treasure, far places'},
+        {'id': 'thoughtful', 'label': 'Thoughtful', 'description': 'Ideas that stay with you'},
+        {'id': 'scared', 'label': 'Scared', 'description': 'Ghosts, monsters, dread'}
     ]
 
     return jsonify({'moods': moods}), 200

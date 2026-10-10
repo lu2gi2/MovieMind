@@ -65,5 +65,15 @@ def create_app(config_name=None):
     # Create database tables
     with app.app_context():
         db.create_all()
+        _ensure_columns()
 
     return app
+
+
+def _ensure_columns():
+    """Lightweight migration: add columns introduced after a database was first created."""
+    from sqlalchemy import inspect, text
+    cols = {c['name'] for c in inspect(db.engine).get_columns('users')}
+    if 'taste_embedding' not in cols:
+        with db.engine.begin() as conn:
+            conn.execute(text('ALTER TABLE users ADD COLUMN taste_embedding TEXT'))

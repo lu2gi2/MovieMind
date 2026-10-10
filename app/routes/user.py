@@ -5,7 +5,7 @@ from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
 from app import db
 from app.models import User, Movie, UserFavorite, UserInteraction
-from app.ml.taste_updater import TasteUpdater
+from app.ml.taste_updater import TasteUpdater, refresh_embedding_taste
 from app.ml.explainer import RecommendationExplainer
 from datetime import datetime
 
@@ -190,6 +190,7 @@ def add_favorite():
         # Update taste vector using TasteUpdater (adaptive learning)
         updater = TasteUpdater(current_user.user_id)
         update_result = updater.update_on_like(movie)
+        refresh_embedding_taste(current_user.user_id)   # v2 centroid
 
         # Generate explanation for taste change
         explainer = RecommendationExplainer(current_user.user_id)
@@ -248,6 +249,7 @@ def remove_favorite(movie_id):
         if movie:
             updater = TasteUpdater(current_user.user_id)
             updater.update_on_unlike(movie)
+        refresh_embedding_taste(current_user.user_id)   # recompute centroid from remaining likes
 
         return jsonify({
             'message': 'Movie removed from favorites',
@@ -338,9 +340,30 @@ def get_taste_vector():
     # Sort by preference strength
     sorted_taste = sorted(taste.items(), key=lambda x: x[1], reverse=True)
 
+    # v2: the films that sit closest to the user's taste centroid in embedding space
+    neighbours = []
+    emb = current_user.get_taste_embedding()
+    from app.ml.embeddings import get_store
+    store = get_store()
+    liked = {f.movie_id for f in UserFavorite.query.filter_by(user_id=current_user.user_id).all()}
+    if store is not None and emb and len(emb) == store.E.shape[1] and liked:
+        import numpy as np
+        sims = store.scores(np.array(emb, dtype='float32'))
+        for i in np.argsort(-sims):
+            mid = int(store.ids[i])
+            if mid in liked:
+                continue
+            m = Movie.query.get(mid)
+            if m:
+                neighbours.append({'movie_id': mid, 'title': m.title, 'release_year': m.release_year,
+                                   'similarity': round(float(sims[i]), 3)})
+            if len(neighbours) == 6:
+                break
+
     return jsonify({
         'taste_vector': dict(sorted_taste),
-        'top_genres': [g for g, _ in sorted_taste[:5]] if sorted_taste else []
+        'top_genres': [g for g, _ in sorted_taste[:5]] if sorted_taste else [],
+        'taste_neighbours': neighbours
     }), 200
 
 

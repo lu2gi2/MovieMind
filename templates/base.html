@@ -3,108 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}MovieMind{% endblock %} | AI Movie Recommendations</title>
-
-    <!-- Bootstrap 5 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Custom CSS -->
+    <title>{% block title %}MovieMind{% endblock %} · MovieMind</title>
+    <meta name="description" content="Pick films by where your taste sits, then choose how far a mood moves you.">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 20'%3E%3Ccircle cx='6' cy='10' r='4.5' fill='%230E6660'/%3E%3Cpath d='M13 10h12m-4-4 4 4-4 4' fill='none' stroke='%231D1B17' stroke-width='1.6'/%3E%3Ccircle cx='29.5' cy='10' r='3.2' fill='none' stroke='%23B8381A' stroke-width='1.8'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..500&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
-        <div class="container">
-            <a class="navbar-brand fw-bold" href="/">
-                <i class="bi bi-film me-2"></i>MovieMind
+    <!-- icon sprite: square caps, 1.6px strokes, drawn for this project -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20.5 3.8 12.3A4.6 4.6 0 0 1 12 6.6a4.6 4.6 0 0 1 8.2 5.7Z"/></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5 5 19"/></symbol>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></symbol>
+        <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16M14 6l6 6-6 6"/></symbol>
+        <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+        <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+        <symbol id="i-redo" viewBox="0 0 24 24"><path d="M19 8a8 8 0 1 0 1.5 6M19 3v5h-5"/></symbol>
+    </svg>
+
+    <header class="site-head">
+        <div class="wrap">
+            <a class="brand" href="/" aria-label="MovieMind home">
+                <svg viewBox="0 0 34 20" aria-hidden="true"><circle cx="6" cy="10" r="4.5" fill="#0E6660"/><path d="M13 10h12m-4-4 4 4-4 4" fill="none" stroke="#1D1B17" stroke-width="1.6"/><circle cx="29.5" cy="10" r="3.2" fill="none" stroke="#B8381A" stroke-width="1.8"/></svg>
+                MovieMind
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item" id="nav-dashboard" style="display: none;">
-                        <a class="nav-link" href="/dashboard">
-                            <i class="bi bi-house me-1"></i>Dashboard
-                        </a>
-                    </li>
-                    <li class="nav-item" id="nav-browse" style="display: none;">
-                        <a class="nav-link" href="/browse">
-                            <i class="bi bi-collection me-1"></i>Browse
-                        </a>
-                    </li>
-                    <li class="nav-item" id="nav-favorites" style="display: none;">
-                        <a class="nav-link" href="/favorites">
-                            <i class="bi bi-heart me-1"></i>Favorites
-                        </a>
-                    </li>
-                </ul>
-                <ul class="navbar-nav">
-                    <!-- Logged out state -->
-                    <li class="nav-item" id="nav-login">
-                        <a class="nav-link" href="/login">Login</a>
-                    </li>
-                    <li class="nav-item" id="nav-signup">
-                        <a class="btn btn-primary btn-sm ms-2" href="/signup">Sign Up</a>
-                    </li>
-                    <!-- Logged in state -->
-                    <li class="nav-item dropdown" id="nav-user" style="display: none;">
-                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
-                            <i class="bi bi-person-circle me-1"></i>
-                            <span id="nav-username">User</span>
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="/profile"><i class="bi bi-person me-2"></i>Profile</a></li>
-                            <li><a class="dropdown-item" href="/favorites"><i class="bi bi-heart me-2"></i>Favorites</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="#" id="logout-btn"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
-                        </ul>
-                    </li>
-                </ul>
+            <nav class="nav" aria-label="Main" data-auth="in" hidden>
+                <a href="/dashboard">Tonight</a>
+                <a href="/browse">Browse</a>
+                <a href="/favorites">My list</a>
+            </nav>
+            <div class="head-end">
+                <div data-auth="out" style="display:flex;gap:12px;align-items:center">
+                    <a href="/login" class="link-btn" style="text-decoration:none;font-weight:500">Log in</a>
+                    <a href="/signup" class="btn btn--sm">Join</a>
+                </div>
+                <div class="who" data-auth="in" hidden>
+                    <button id="who-btn" aria-haspopup="true" aria-expanded="false"><span data-username>you</span> {% raw %}<svg class="i" aria-hidden="true"><use href="#i-down"/></svg>{% endraw %}</button>
+                    <div class="who-menu" id="who-menu" hidden>
+                        <a href="/profile">Profile</a>
+                        <a href="/favorites">My list</a>
+                        <button id="logout-btn">Log out</button>
+                    </div>
+                </div>
+                <button class="menu-btn" id="menu-btn" aria-label="Menu" aria-expanded="false" data-auth="in" hidden>{% raw %}<svg class="i" aria-hidden="true"><use href="#i-menu"/></svg>{% endraw %}</button>
             </div>
         </div>
-    </nav>
+    </header>
 
-    <!-- Main Content -->
-    <main class="main-content">
-        {% block content %}{% endblock %}
-    </main>
+    <main>{% block content %}{% endblock %}</main>
 
-    <!-- Footer -->
-    <footer class="footer bg-dark text-light py-4 mt-5">
-        <div class="container">
-            <div class="row">
-                <div class="col-md-6">
-                    <h5><i class="bi bi-film me-2"></i>MovieMind</h5>
-                    <p class="text-muted">AI-powered movie recommendations based on your taste and mood.</p>
-                </div>
-                <div class="col-md-3">
-                    <h6>Quick Links</h6>
-                    <ul class="list-unstyled">
-                        <li><a href="/dashboard" class="text-muted">Dashboard</a></li>
-                        <li><a href="/browse" class="text-muted">Browse Movies</a></li>
-                    </ul>
-                </div>
-                <div class="col-md-3">
-                    <h6>Data Sources</h6>
-                    <ul class="list-unstyled">
-                        <li><a href="https://www.themoviedb.org/" class="text-muted" target="_blank">TMDB</a></li>
-                        <li><a href="https://grouplens.org/datasets/movielens/" class="text-muted" target="_blank">MovieLens</a></li>
-                    </ul>
-                </div>
-            </div>
-            <hr class="my-3">
-            <p class="text-center text-muted mb-0">&copy; 2026 MovieMind. Built with Flask & scikit-learn.</p>
+    <footer class="site-foot">
+        <div class="wrap">
+            <span>MovieMind — a taste is a place; a mood is a direction.</span>
+            <span>Film data <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a> · ratings <a href="https://grouplens.org/datasets/movielens/" target="_blank" rel="noopener">MovieLens</a> · vectors <span class="mono">all-MiniLM-L6-v2</span></span>
         </div>
     </footer>
 
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Custom JS -->
+    <dialog id="movie-dialog" aria-labelledby="dlg-title">
+        <button class="dlg-x" aria-label="Close">{% raw %}<svg class="i" aria-hidden="true"><use href="#i-x"/></svg>{% endraw %}</button>
+        <div class="dlg"></div>
+    </dialog>
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     {% block extra_js %}{% endblock %}
 </body>

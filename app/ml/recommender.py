@@ -326,9 +326,20 @@ _recommender = None
 
 
 def get_recommender():
-    """Get or create the recommender singleton"""
+    """
+    Get or create the recommender singleton.
+
+    RECOMMENDER=v2 (default) uses the embedding recommender when the embeddings have been
+    built; RECOMMENDER=v1 (or missing embeddings) falls back to the TF-IDF + genre engine.
+    """
+    import os
     global _recommender
     if _recommender is None:
-        _recommender = RecommendationEngine()
-        _recommender.load()
+        from app.ml.embeddings import EmbeddingStore
+        if os.getenv('RECOMMENDER', 'v2').lower() == 'v2' and EmbeddingStore.available():
+            from app.ml.embedding_recommender import EmbeddingRecommender
+            _recommender = EmbeddingRecommender()
+        else:
+            _recommender = RecommendationEngine()
+            _recommender.load()
     return _recommender
