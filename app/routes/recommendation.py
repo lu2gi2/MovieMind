@@ -41,7 +41,7 @@ def get_recommendations():
 
     try:
         recommender = get_recommender()
-        if getattr(recommender, 'engine', '') == 'v2-embedding':
+        if getattr(recommender, 'engine', '').startswith('v2'):
             recommendations = recommender.get_recommendations(
                 user_id=current_user.user_id, mood=mood, limit=limit, lam=lam
             )
@@ -109,6 +109,7 @@ def get_movies():
         genre: Filter by genre
         year: Filter by release year
         search: Search by title
+        mood: Order by closeness to a mood direction in the embedding space (overrides sort)
         sort: Sort by 'rating', 'popularity', 'year', 'title' (default: popularity)
         order: 'asc' or 'desc' (default: desc)
         page: Page number (default 1)
@@ -139,6 +140,31 @@ def get_movies():
 
     if search:
         query = query.filter(Movie.title.ilike(f'%{search}%'))
+
+    # Mood ordering: rank the filtered films by cosine similarity to the mood direction
+    mood = request.args.get('mood')
+    if mood:
+        import math
+        import numpy as np
+        from app.ml.embeddings import get_store
+        store = get_store()
+        if store is None or mood.lower() not in store.mood_vectors:
+            return jsonify({'error': f"Unknown mood '{mood}'"}), 400
+        pairs = [(store.id_to_row[i], i) for (i,) in query.with_entities(Movie.movie_id).all() if i in store.id_to_row]
+        if pairs:
+            scores = store.E[[r for r, _ in pairs]] @ store.mood_vectors[mood.lower()]
+            ordered = [pairs[j][1] for j in np.argsort(-scores)]
+        else:
+            ordered = []
+        total = len(ordered)
+        window = ordered[(page - 1) * per_page: page * per_page]
+        by_id = {m.movie_id: m for m in Movie.query.filter(Movie.movie_id.in_(window)).all()} if window else {}
+        pages_n = math.ceil(total / per_page) if total else 0
+        return jsonify({
+            'movies': [by_id[i].to_dict() for i in window if i in by_id],
+            'total': total, 'page': page, 'per_page': per_page, 'pages': pages_n,
+            'has_next': page < pages_n, 'has_prev': page > 1, 'mood': mood.lower()
+        }), 200
 
     # Apply sorting
     sort_columns = {

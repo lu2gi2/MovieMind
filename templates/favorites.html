@@ -1,44 +1,36 @@
 {% extends "base.html" %}
-{% block title %}My list{% endblock %}
+{% block title %}Favorites{% endblock %}
+{% block bgmode %}soft{% endblock %}
 
 {% block content %}
-<div class="wrap page">
-    <div class="page-head">
-        <div><p class="eyebrow">Where your taste comes from</p><h1 style="font-size:clamp(2.2rem,4vw,3.4rem);margin-top:12px">My <em>list</em></h1></div>
-        <p class="lede mono" id="tally" style="font-size:.9rem">&nbsp;</p>
-    </div>
-    <div class="cards" id="grid"></div>
-    <div class="empty" id="empty" hidden>
-        <h3>Nothing here yet.</h3>
-        <p>Your spot on the map is still dead centre. Like a few films and it will start to lean.</p>
-        <a class="btn" href="/browse">Browse films</a>
-    </div>
+<div class="page-head">
+    <div><h1>Favorites</h1><p>The stories you love, all in one place.</p></div>
+    <div class="field" style="margin:0"><label for="sort">Sort by</label>
+        <select class="select" id="sort"><option value="added">Recently added</option><option value="title">Title A–Z</option><option value="year">Newest release</option><option value="rating">Highest rated</option></select></div>
 </div>
+<div class="grid" id="grid" aria-busy="true"></div>
+<div id="empty" hidden><div class="empty"><h2>Your favorites will live here.</h2><p>Save the stories you love and find them here whenever you need them.</p><a class="btn" href="/dashboard">Find something to love</a></div></div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-const $ = id => document.getElementById(id);
-function refresh() {
-    const n = $('grid').children.length;
-    $('tally').textContent = n ? `${n} film${n === 1 ? '' : 's'} shaping your taste` : '';
-    $('empty').hidden = n > 0;
+const KIND = 'fav', KEY = 'favorites';
+let items = [];
+const sorters = { added: () => 0, title: (a, b) => a.title.localeCompare(b.title), year: (a, b) => (b.release_year || 0) - (a.release_year || 0), rating: (a, b) => (b.vote_average || 0) - (a.vote_average || 0) };
+function render() {
+    const list = items.slice().sort(sorters[$('sort').value]);
+    $('grid').innerHTML = gridHTML(list);
+    $('empty').hidden = list.length > 0; $('sort').disabled = !list.length;
 }
 (async () => {
-    const auth = await checkAuth();
-    if (!auth.authenticated) { location.href = '/login'; return; }
-    const { ok, data } = await json('/api/user/favorites');
-    if (!ok) { $('grid').innerHTML = ''; $('empty').hidden = false; return; }
-    MM.favs = new Set(data.favorites.map(m => m.movie_id));
-    $('grid').innerHTML = data.favorites.map((m, i) => cardHTML(m, { i })).join('');
-    bindCards($('grid'));
-    refresh();
-    // when a heart is switched off here, fade the card out of the list
-    document.addEventListener('taste:changed', () => {
-        [...$('grid').querySelectorAll('.heart')].forEach(h => {
-            if (!MM.favs.has(+h.dataset.id)) { const c = h.closest('.card'); c.style.transition = 'opacity 250ms, transform 250ms'; c.style.opacity = 0; c.style.transform = 'scale(.97)'; setTimeout(() => { c.remove(); refresh(); }, 260); }
-        });
-    });
+    await Store.load();
+    const { ok, data } = await get('/api/user/' + KEY + '?per_page=100');
+    $('grid').removeAttribute('aria-busy');
+    if (!ok) { $('grid').innerHTML = errorHTML(data.error || 'We couldn’t load this list.'); return; }
+    items = data[KEY]; render();
+    $('sort').addEventListener('change', render);
+    // removing a title here takes it off the page; the shared store keeps every other page in sync
+    Store.on((d) => { if (d.done && d.kind === KIND && !Store.has(KIND, d.id)) { items = items.filter((m) => m.movie_id !== d.id); render(); } });
 })();
 </script>
 {% endblock %}

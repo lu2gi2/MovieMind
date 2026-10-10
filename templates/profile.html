@@ -1,95 +1,48 @@
 {% extends "base.html" %}
 {% block title %}Profile{% endblock %}
+{% block bgmode %}faint{% endblock %}
 
 {% block content %}
-<div class="wrap page">
-    <div class="page-head">
-        <div><p class="eyebrow">You</p><h1 style="font-size:clamp(2.2rem,4vw,3.4rem);margin-top:12px" id="who">Profile</h1></div>
-        <p class="lede mono" id="since" style="font-size:.9rem">&nbsp;</p>
-    </div>
-    <div id="alert" role="status"></div>
-
-    <div class="bignums">
-        <div><b id="fav-count">0</b><span>Films on your list</span></div>
-        <div><b id="int-count">0</b><span>Interactions</span></div>
-        <div><b class="sm" id="top-genre">—</b><span>Leading genre</span></div>
-    </div>
-
-    <div class="profile">
-        <div>
-            <div class="block">
-                <h3>Where your taste sits</h3>
-                <p class="muted" style="margin-bottom:16px;font-size:.95rem">Your taste is the centre of the films you’ve liked. These are the unseen films closest to that centre.</p>
-                <ol class="neigh" id="neigh"><li class="muted"><span></span>Like a few films and your centre will appear here.</li></ol>
-            </div>
-            <div class="block">
-                <h3>Genre lean</h3>
-                <div class="bars" id="bars"><p class="muted">Nothing yet.</p></div>
-                <p style="margin-top:24px"><button class="link-btn" id="reset-btn">Reset what the app has learned about me</button></p>
-            </div>
-        </div>
-        <div>
-            <div class="block">
-                <h3>Starting genres</h3>
-                <p class="muted" style="margin-bottom:16px;font-size:.95rem">These only seed your first suggestions. Pick at least two.</p>
-                <div class="chips" id="genre-grid" style="margin-bottom:24px"></div>
-                <button class="btn" id="save-btn">Save genres</button>
-            </div>
-            <div class="block">
-                <h3>Account</h3>
-                <div class="field"><label for="username">Username</label><input class="input" id="username" readonly></div>
-                <div class="field"><label for="email">Email</label><input class="input" id="email" readonly></div>
-            </div>
-        </div>
-    </div>
+<div class="page-head"><div><h1>Profile</h1><p id="since"></p></div></div>
+<div id="alert" role="status"></div>
+<div class="two">
+    <section class="panel" aria-labelledby="acc-h"><h2 id="acc-h" style="margin-bottom:16px">Account</h2>
+        <div class="field"><label for="username">Username</label><input class="input" id="username" readonly></div>
+        <div class="field"><label for="email">Email</label><input class="input" id="email" readonly></div>
+        <p class="muted small" id="stats"></p>
+    </section>
+    <section class="panel" aria-labelledby="g-h"><h2 id="g-h" style="margin-bottom:6px">Starting genres</h2>
+        <p class="muted small" style="margin-bottom:16px">These seed your first suggestions. Your likes take over from there. Pick at least two.</p>
+        <div class="chips" id="genre-grid" style="margin-bottom:20px"></div>
+        <button class="btn" id="save-btn">Save genres</button>
+    </section>
 </div>
+<section class="panel" style="margin-top:var(--s5)" aria-labelledby="r-h"><h2 id="r-h" style="margin-bottom:6px">Reset what MovieMind learned</h2>
+    <p class="muted small" style="margin-bottom:12px">Clears the genre profile. Your likes, favorites and watchlist stay.</p>
+    <button class="btn btn--ghost btn--sm" id="reset-btn">Reset genre profile</button></section>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-const $ = id => document.getElementById(id);
-let preferred = [];
-const say = (msg, ok = true) => { $('alert').innerHTML = `<div class="note ${ok ? 'note--ok' : ''}">${esc(msg)}</div>`; setTimeout(() => $('alert').innerHTML = '', 4000); };
-
-function bars(tv) {
-    const rows = Object.entries(tv || {}).sort((a, b) => b[1] - a[1]);
-    $('top-genre').textContent = rows.length ? rows[0][0] : '—';
-    $('bars').innerHTML = rows.length ? rows.slice(0, 8).map(([g, v]) =>
-        `<div class="bar-row"><span>${esc(g)}</span><div class="track"><i style="width:${Math.round(v * 100)}%"></i></div><span class="pct">${Math.round(v * 100)}</span></div>`).join('') : '<p class="muted">Nothing yet. Like a few films first.</p>';
-}
-
-async function neighbours() {
-    const { data } = await json('/api/user/taste');
-    const n = data.taste_neighbours || [];
-    if (n.length) $('neigh').innerHTML = n.map(m => `<li><span class="t">${esc(m.title)}</span><span class="mono muted">${m.release_year || ''} · ${m.similarity.toFixed(2)}</span></li>`).join('');
-}
-
-async function genres() {
-    const { data } = await json('/api/genres');
-    $('genre-grid').innerHTML = (data.genres || []).map(g => `<label class="chip"><input type="checkbox" value="${esc(g)}" ${preferred.includes(g) ? 'checked' : ''}><span>${esc(g)}</span></label>`).join('');
-}
-
+const say = (msg, kind) => { $('alert').innerHTML = `<div class="note note--${kind}">${esc(msg)}</div>`; setTimeout(() => { $('alert').innerHTML = ''; }, 4000); };
 (async () => {
-    const auth = await checkAuth();
-    if (!auth.authenticated) { location.href = '/login'; return; }
-    const { data } = await json('/api/user/profile'); const p = data.profile;
-    $('who').innerHTML = `${esc(p.username)}`;
-    $('since').textContent = 'Member since ' + new Date(p.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
-    $('username').value = p.username; $('email').value = p.email;
-    $('fav-count').textContent = p.favorite_count; $('int-count').textContent = p.interaction_count;
-    preferred = p.preferred_genres || [];
-    bars(p.taste_vector); neighbours(); genres();
-
+    const [p, g] = await Promise.all([get('/api/user/profile'), get('/api/genres')]);
+    if (!p.ok) { $('alert').innerHTML = errorHTML('We couldn’t load your profile.'); return; }
+    const pr = p.data.profile, pref = pr.preferred_genres || [];
+    $('username').value = pr.username; $('email').value = pr.email;
+    $('since').textContent = 'Member since ' + new Date(pr.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
+    $('stats').textContent = `${pr.like_count} liked · ${pr.favorite_count} favorites · ${pr.watchlist_count} on your watchlist`;
+    $('genre-grid').innerHTML = (g.data.genres || []).map((x) => `<label class="chk"><input type="checkbox" value="${esc(x)}" ${pref.includes(x) ? 'checked' : ''}><span>${esc(x)}</span></label>`).join('');
     $('save-btn').addEventListener('click', async () => {
-        const sel = [...document.querySelectorAll('#genre-grid input:checked')].map(i => i.value);
-        if (sel.length < 2) { say('Pick at least two genres.', false); return; }
-        const r = await json('/api/user/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ preferred_genres: sel }) });
-        say(r.ok ? 'Saved. Your next picks will start from there.' : 'That didn’t save. Try once more.', r.ok);
+        const sel = [...document.querySelectorAll('#genre-grid input:checked')].map((i) => i.value);
+        if (sel.length < 2) { say('Pick at least two genres.', 'error'); return; }
+        const r = await api('/api/user/profile', { method: 'PUT', body: { preferred_genres: sel } });
+        r.ok ? say('Saved. Your next picks will start from there.', 'ok') : say('We couldn’t save that. Try again.', 'error');
     });
     $('reset-btn').addEventListener('click', async () => {
-        if (!confirm('Reset your genre lean? Your list of liked films stays.')) return;
-        const r = await post('/api/user/taste/reset');
-        if (r.ok) { bars(r.data.taste_vector); say('Genre lean cleared.'); }
+        if (!confirm('Reset your genre profile? Your likes, favorites and watchlist stay.')) return;
+        const r = await api('/api/user/taste/reset', { method: 'POST' });
+        r.ok ? say('Genre profile cleared.', 'ok') : say('We couldn’t reset it. Try again.', 'error');
     });
 })();
 </script>

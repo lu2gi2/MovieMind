@@ -66,6 +66,7 @@ def create_app(config_name=None):
     with app.app_context():
         db.create_all()
         _ensure_columns()
+        migrate_legacy_likes()
 
     return app
 
@@ -77,3 +78,31 @@ def _ensure_columns():
     if 'taste_embedding' not in cols:
         with db.engine.begin() as conn:
             conn.execute(text('ALTER TABLE users ADD COLUMN taste_embedding TEXT'))
+
+
+def migrate_legacy_likes():
+    """
+    Before Likes existed, adding a favourite also counted as a like (it logged a 'like' interaction and
+    taught the recommender). Restore exactly those: favourites whose interaction was logged as 'like'
+    and that have no UserLike yet. New-style favourites log 'favorite', so they are never promoted.
+    Idempotent; returns the number of likes created.
+    """
+    from app.models import UserFavorite, UserLike, UserInteraction
+    created, users = 0, set()
+    try:
+        for fav in UserFavorite.query.all():
+            if UserLike.query.filter_by(user_id=fav.user_id, movie_id=fav.movie_id).first():
+                continue
+            legacy = UserInteraction.query.filter_by(user_id=fav.user_id, movie_id=fav.movie_id,
+                                                     interaction_type='like').first()
+            if legacy:
+                db.session.add(UserLike(user_id=fav.user_id, movie_id=fav.movie_id, created_at=fav.added_at))
+                created += 1; users.add(fav.user_id)
+        db.session.commit()
+        if users:
+            from app.ml.taste_updater import refresh_embedding_taste
+            for uid in users:
+                refresh_embedding_taste(uid)
+    except Exception:
+        db.session.rollback()
+    return created

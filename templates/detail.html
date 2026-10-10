@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Details{% endblock %}
+{% block bgmode %}calm{% endblock %}
+
+{% block content %}
+<a class="back" href="/dashboard" id="back">{% raw %}<svg class="i i--sm" aria-hidden="true"><use href="#i-back"/></svg>{% endraw %} Back</a>
+<div id="view" aria-busy="true"><div class="detail"><div class="skel" style="aspect-ratio:2/3"></div><div><div class="skel" style="height:40px;width:60%"></div><div class="skel" style="height:120px;margin-top:24px"></div></div></div></div>
+<section class="section" id="sec-sim" aria-labelledby="sim-h" hidden>
+    <div class="section-head"><div><h2 id="sim-h">Similar titles</h2><p>Nearest to this film in the embedding space.</p></div></div>
+    <div class="grid grid--row" id="sim"></div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const MOVIE_ID = {{ movie_id }};
+(async () => {
+    if (document.referrer.startsWith(location.origin) && !document.referrer.includes('/movie/')) { $('back').addEventListener('click', (e) => { e.preventDefault(); history.back(); }); }
+    await Store.load();
+    const { ok, status, data } = await get('/api/movies/' + MOVIE_ID);
+    $('view').removeAttribute('aria-busy');
+    if (!ok) { $('view').innerHTML = status === 404 ? emptyHTML('We couldn’t find that title', 'It may have been removed from the catalogue.', { href: '/browse', label: 'Browse movies' }) : errorHTML(data.error || 'We couldn’t load this title.'); return; }
+    const m = data.movie;
+    document.title = `${m.title} · MovieMind`;
+    let why = null; try { why = JSON.parse(sessionStorage.getItem('mm:why:' + m.movie_id) || 'null'); } catch (e) { /* none */ }
+    const facts = [m.release_year, m.runtime ? `${m.runtime} min` : null, m.vote_average ? `TMDB ${m.vote_average.toFixed(1)} / 10` : null].filter(Boolean);
+    const d = why && why.detail;
+    $('view').innerHTML = `<div class="detail">
+        <div class="poster">${posterHTML(m)}</div>
+        <div>
+            <h1>${esc(m.title)}</h1>
+            <div class="facts">${facts.map((f) => `<span>${esc(f)}</span>`).join('')}</div>
+            <div class="tags">${(m.genres || []).map((g) => `<a class="tag" href="/browse?genre=${encodeURIComponent(g)}">${esc(g)}</a>`).join('')}</div>
+            <div class="actions-lg">${actButton('like', m.movie_id, { large: true })}${actButton('fav', m.movie_id, { large: true })}${actButton('watch', m.movie_id, { large: true })}</div>
+            ${why ? `<div class="why-box"><div class="eyebrow">Why it was recommended</div><p>${esc(why.text)}</p>${d ? `<p class="muted small" style="margin-top:6px">${d.mood_fit != null && d.places_moved_by_mood ? `The mood moved it ${d.places_moved_by_mood > 0 ? 'up' : 'down'} ${Math.abs(d.places_moved_by_mood)} place${Math.abs(d.places_moved_by_mood) === 1 ? '' : 's'}. ` : ''}${d.taste_match != null ? `Similarity to your taste ${d.taste_match.toFixed(2)}.` : ''}</p>` : ''}</div>` : ''}
+            ${m.tagline ? `<p class="muted" style="margin-bottom:12px"><em>${esc(m.tagline)}</em></p>` : ''}
+            <p>${esc(m.overview || 'No synopsis available.')}</p>
+            <dl class="dl"><dt>Director</dt><dd>${esc(m.director || '—')}</dd><dt>Cast</dt><dd>${esc((m.cast || []).slice(0, 6).join(', ') || '—')}</dd></dl>
+        </div></div>`;
+    const s = await get(`/api/similar/${MOVIE_ID}?limit=12`);
+    const sim = s.data.similar_movies || [];
+    if (sim.length) { $('sim').innerHTML = gridHTML(sim); $('sec-sim').hidden = false; }
+})();
+</script>
+{% endblock %}

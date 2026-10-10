@@ -31,6 +31,10 @@ class User(UserMixin, db.Model):
     # Relationships
     favorites = db.relationship('UserFavorite', backref='user', lazy='dynamic',
                                 cascade='all, delete-orphan')
+    likes = db.relationship('UserLike', backref='user', lazy='dynamic',
+                            cascade='all, delete-orphan')
+    watchlist = db.relationship('UserWatchlist', backref='user', lazy='dynamic',
+                                cascade='all, delete-orphan')
     interactions = db.relationship('UserInteraction', backref='user', lazy='dynamic',
                                    cascade='all, delete-orphan')
 
@@ -139,6 +143,44 @@ class UserFavorite(db.Model):
         return f'<UserFavorite user={self.user_id} movie={self.movie_id}>'
 
 
+class UserLike(db.Model):
+    """A positive preference signal. Drives the taste profile (genre profile and embedding centroid)."""
+    __tablename__ = 'user_likes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False, index=True)
+    movie_id = db.Column(db.Integer, db.ForeignKey('movies.movie_id'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'movie_id', name='unique_user_movie_like'),
+    )
+
+    movie = db.relationship('Movie', backref='liked_by')
+
+    def __repr__(self):
+        return f'<UserLike user={self.user_id} movie={self.movie_id}>'
+
+
+class UserWatchlist(db.Model):
+    """Titles saved for later. Not a preference signal."""
+    __tablename__ = 'user_watchlist'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False, index=True)
+    movie_id = db.Column(db.Integer, db.ForeignKey('movies.movie_id'), nullable=False, index=True)
+    added_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'movie_id', name='unique_user_movie_watchlist'),
+    )
+
+    movie = db.relationship('Movie', backref='watchlisted_by')
+
+    def __repr__(self):
+        return f'<UserWatchlist user={self.user_id} movie={self.movie_id}>'
+
+
 class UserInteraction(db.Model):
     """Track all user interactions for analytics and learning"""
     __tablename__ = 'user_interactions'
@@ -146,7 +188,7 @@ class UserInteraction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False, index=True)
     movie_id = db.Column(db.Integer, db.ForeignKey('movies.movie_id'), nullable=False, index=True)
-    interaction_type = db.Column(db.String(20), nullable=False)  # 'view', 'like', 'unlike', 'rate'
+    interaction_type = db.Column(db.String(20), nullable=False)  # 'view', 'like', 'unlike', 'favorite', 'unfavorite', 'watchlist', 'unwatchlist', 'rate'
     rating = db.Column(db.Float)  # Optional: 1-5 star rating
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 

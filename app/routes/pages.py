@@ -57,3 +57,31 @@ def favorites():
 def profile():
     """User profile and settings"""
     return render_template('profile.html')
+
+
+@pages_bp.route('/discover')
+@login_required
+def discover():
+    """Discover (alias of the dashboard)"""
+    return render_template('dashboard.html')
+
+
+@pages_bp.route('/watchlist')
+@login_required
+def watchlist():
+    """Titles saved for later"""
+    return render_template('watchlist.html')
+
+
+@pages_bp.route('/taste')
+@login_required
+def taste():
+    """What MovieMind has learned about the user's taste"""
+    return render_template('taste.html')
+
+
+@pages_bp.route('/movie/<int:movie_id>')
+@login_required
+def movie_detail(movie_id):
+    """Movie details page"""
+    return render_template('detail.html', movie_id=movie_id)

@@ -4,70 +4,125 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}MovieMind{% endblock %} · MovieMind</title>
-    <meta name="description" content="Pick films by where your taste sits, then choose how far a mood moves you.">
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 20'%3E%3Ccircle cx='6' cy='10' r='4.5' fill='%230E6660'/%3E%3Cpath d='M13 10h12m-4-4 4 4-4 4' fill='none' stroke='%231D1B17' stroke-width='1.6'/%3E%3Ccircle cx='29.5' cy='10' r='3.2' fill='none' stroke='%23B8381A' stroke-width='1.8'/%3E%3C/svg%3E">
+    <meta name="description" content="Discover movies that match your taste and mood.">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23E3EEF6'/%3E%3Cpath d='M16 7c6 5 6 11 0 18C10 18 10 12 16 7Z' fill='%23A8B8A0'/%3E%3Cpath d='M16 9v16' stroke='%23456F91' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..500&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,400..700,60;1,9..144,300..500,60&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
     {% block extra_css %}{% endblock %}
 </head>
-<body>
-    <!-- icon sprite: square caps, 1.6px strokes, drawn for this project -->
-    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-        <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20.5 3.8 12.3A4.6 4.6 0 0 1 12 6.6a4.6 4.6 0 0 1 8.2 5.7Z"/></symbol>
-        <symbol id="i-x" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5 5 19"/></symbol>
-        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></symbol>
-        <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16M14 6l6 6-6 6"/></symbol>
-        <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+<body data-bg="{% block bgmode %}strong{% endblock %}" data-auth="{{ 1 if current_user.is_authenticated else 0 }}">
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+        <!-- interface icons -->
+        <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></symbol>
+        <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></symbol>
+        <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20.5 4.2 12.8a4.6 4.6 0 0 1 6.5-6.5L12 7.6l1.3-1.3a4.6 4.6 0 0 1 6.5 6.5Z"/></symbol>
+        <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8 6.8 19.6l1-5.8-4.3-4.1 5.9-.8Z"/></symbol>
+        <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6.5 3.5h11v17L12 16.5l-5.5 4Z"/></symbol>
+        <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+        <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
         <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
-        <symbol id="i-redo" viewBox="0 0 24 24"><path d="M19 8a8 8 0 1 0 1.5 6M19 3v5h-5"/></symbol>
+        <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></symbol>
+        <!-- mood icons -->
+        <symbol id="m-happy" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14c1.3 2.2 5.7 2.2 7 0M9 9.5h.01M15 9.5h.01"/></symbol>
+        <symbol id="m-sad" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 16c1.3-2 5.7-2 7 0M9 9.5h.01M15 9.5h.01"/></symbol>
+        <symbol id="m-excited" viewBox="0 0 24 24"><path d="M13 3 5.5 13.5H11L10 21l8-11h-5.5Z"/></symbol>
+        <symbol id="m-relaxed" viewBox="0 0 24 24"><path d="M3 9c3-3 6 3 9 0s6 3 9 0M3 15c3-3 6 3 9 0s6 3 9 0"/></symbol>
+        <symbol id="m-romantic" viewBox="0 0 24 24"><path d="M12 20.5 4.2 12.8a4.6 4.6 0 0 1 6.5-6.5L12 7.6l1.3-1.3a4.6 4.6 0 0 1 6.5 6.5Z"/></symbol>
+        <symbol id="m-thrilled" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.8"/></symbol>
+        <symbol id="m-nostalgic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></symbol>
+        <symbol id="m-adventurous" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></symbol>
+        <symbol id="m-thoughtful" viewBox="0 0 24 24"><path d="M9.5 18h5M10.5 21h3M12 3a6 6 0 0 0-3.6 10.8c.6.5 1.1 1.2 1.1 2.2h5c0-1 .5-1.7 1.1-2.2A6 6 0 0 0 12 3Z"/></symbol>
+        <symbol id="m-scared" viewBox="0 0 24 24"><path d="M6 21V11a6 6 0 0 1 12 0v10l-3-2-3 2-3-2Z"/><path d="M9.5 11h.01M14.5 11h.01"/></symbol>
+        <symbol id="m-none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></symbol>
     </svg>
 
-    <header class="site-head">
-        <div class="wrap">
-            <a class="brand" href="/" aria-label="MovieMind home">
-                <svg viewBox="0 0 34 20" aria-hidden="true"><circle cx="6" cy="10" r="4.5" fill="#0E6660"/><path d="M13 10h12m-4-4 4 4-4 4" fill="none" stroke="#1D1B17" stroke-width="1.6"/><circle cx="29.5" cy="10" r="3.2" fill="none" stroke="#B8381A" stroke-width="1.8"/></svg>
-                MovieMind
+    <!-- decorative botanical layers: no pointer events, hidden from assistive tech -->
+    <div class="bg" aria-hidden="true">
+        <div class="bg-layer bg-corner"></div>
+        <div class="bg-layer bg-branch"></div>
+        <div class="bg-layer bg-float"></div>
+    </div>
+    <a class="skip" href="#content">Skip to content</a>
+
+    {% if current_user.is_authenticated %}
+    <div class="shell">
+        <aside class="side" aria-label="Primary">
+            <a class="logo" href="/dashboard" aria-label="MovieMind home">
+                <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#E3EEF6"/><path d="M16 6.5c6.4 5 6.4 11.5 0 19-6.4-7.5-6.4-14 0-19Z" fill="#A8B8A0"/><path d="M16 9v17" stroke="#456F91" stroke-width="1.6" stroke-linecap="round"/></svg>
+                <span>MovieMind</span>
             </a>
-            <nav class="nav" aria-label="Main" data-auth="in" hidden>
-                <a href="/dashboard">Tonight</a>
-                <a href="/browse">Browse</a>
-                <a href="/favorites">My list</a>
+            <nav class="nav" aria-label="Main">
+                <a href="/dashboard"><svg class="i" aria-hidden="true"><use href="#i-compass"/></svg><span>Home</span></a>
+                <a href="/browse"><svg class="i" aria-hidden="true"><use href="#i-film"/></svg><span>Movies</span></a>
+                <a href="/favorites"><svg class="i" aria-hidden="true"><use href="#i-star"/></svg><span>Favorites</span><span class="count" id="count-fav"></span></a>
+                <a href="/watchlist"><svg class="i" aria-hidden="true"><use href="#i-bookmark"/></svg><span>Watchlist</span><span class="count" id="count-watch"></span></a>
+                <a href="/taste"><svg class="i" aria-hidden="true"><use href="#i-sliders"/></svg><span>My Taste</span></a>
             </nav>
-            <div class="head-end">
-                <div data-auth="out" style="display:flex;gap:12px;align-items:center">
-                    <a href="/login" class="link-btn" style="text-decoration:none;font-weight:500">Log in</a>
-                    <a href="/signup" class="btn btn--sm">Join</a>
-                </div>
-                <div class="who" data-auth="in" hidden>
-                    <button id="who-btn" aria-haspopup="true" aria-expanded="false"><span data-username>you</span> {% raw %}<svg class="i" aria-hidden="true"><use href="#i-down"/></svg>{% endraw %}</button>
-                    <div class="who-menu" id="who-menu" hidden>
-                        <a href="/profile">Profile</a>
-                        <a href="/favorites">My list</a>
+            <div class="promo" aria-label="Tip">
+                <svg viewBox="0 0 120 60" aria-hidden="true"><path d="M-6 58C30 40 60 36 128 4" stroke="#8A7B68" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M40 42c4-12 14-16 24-14-2 11-12 17-24 14Z" fill="#A8B8A0"/><path d="M70 30c3-10 12-14 22-12-2 10-11 15-22 12Z" fill="#B7C7A0"/><path d="M96 18c2-8 9-11 17-9-1 8-8 12-17 9Z" fill="#A8B8A0"/></svg>
+                <strong>Good movies,<br>better moods</strong>
+                <p>Pick a feeling and MovieMind reshapes your picks.</p>
+                <a class="btn btn--sm" href="/dashboard#moods-sec">Explore moods</a>
+            </div>
+            <div class="side-end">
+                <a class="me" href="/profile">
+                    <span class="avatar" aria-hidden="true">{{ current_user.username[:1]|upper }}</span>
+                    <div><strong>{{ current_user.username }}</strong><small>View profile</small></div>
+                </a>
+            </div>
+        </aside>
+
+        <div class="main">
+            <header class="top">
+                <form class="search" action="/browse" method="get" role="search">
+                    <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+                    <label for="global-search" class="sr">Search movies and genres</label>
+                    <input id="global-search" name="search" type="search" placeholder="Search movies, genres…" autocomplete="off">
+                </form>
+                <div class="top-end">
+                    <button class="user-btn" id="user-btn" aria-haspopup="true" aria-expanded="false">
+                        <span class="avatar" style="width:32px;height:32px" aria-hidden="true">{{ current_user.username[:1]|upper }}</span>
+                        <span>{{ current_user.username }}</span>
+                        <svg class="i i--sm" aria-hidden="true"><use href="#i-down"/></svg>
+                    </button>
+                    <div class="menu" id="user-menu" hidden>
+                        <a href="/profile">Profile &amp; genres</a>
+                        <a href="/taste">My Taste</a>
                         <button id="logout-btn">Log out</button>
                     </div>
                 </div>
-                <button class="menu-btn" id="menu-btn" aria-label="Menu" aria-expanded="false" data-auth="in" hidden>{% raw %}<svg class="i" aria-hidden="true"><use href="#i-menu"/></svg>{% endraw %}</button>
-            </div>
+            </header>
+            <main id="content" class="page {% block pageclass %}{% endblock %}" tabindex="-1">
+                {% block content %}{% endblock %}
+            </main>
+            <footer class="foot">MovieMind recommends; it doesn’t stream. Film data from TMDB · ratings from MovieLens.</footer>
         </div>
-    </header>
+    </div>
+    <nav class="tabbar" aria-label="Main (mobile)">
+        <a href="/dashboard"><svg class="i" aria-hidden="true"><use href="#i-compass"/></svg>Home</a>
+        <a href="/browse"><svg class="i" aria-hidden="true"><use href="#i-film"/></svg>Movies</a>
+        <a href="/favorites"><svg class="i" aria-hidden="true"><use href="#i-star"/></svg>Favorites</a>
+        <a href="/watchlist"><svg class="i" aria-hidden="true"><use href="#i-bookmark"/></svg>Watchlist</a>
+        <a href="/taste"><svg class="i" aria-hidden="true"><use href="#i-sliders"/></svg>Taste</a>
+    </nav>
+    {% else %}
+    <div class="pub">
+        <header class="pub-top">
+            <a class="logo" href="/" aria-label="MovieMind home">
+                <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#E3EEF6"/><path d="M16 6.5c6.4 5 6.4 11.5 0 19-6.4-7.5-6.4-14 0-19Z" fill="#A8B8A0"/><path d="M16 9v17" stroke="#456F91" stroke-width="1.6" stroke-linecap="round"/></svg>
+                <span>MovieMind</span>
+            </a>
+            <div class="pub-actions"><a href="/login">Log in</a><a class="btn btn--sm" href="/signup">Create account</a></div>
+        </header>
+        <main id="content" tabindex="-1">{% block pub %}{% endblock %}</main>
+    </div>
+    {% endif %}
 
-    <main>{% block content %}{% endblock %}</main>
-
-    <footer class="site-foot">
-        <div class="wrap">
-            <span>MovieMind — a taste is a place; a mood is a direction.</span>
-            <span>Film data <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a> · ratings <a href="https://grouplens.org/datasets/movielens/" target="_blank" rel="noopener">MovieLens</a> · vectors <span class="mono">all-MiniLM-L6-v2</span></span>
-        </div>
-    </footer>
-
-    <dialog id="movie-dialog" aria-labelledby="dlg-title">
-        <button class="dlg-x" aria-label="Close">{% raw %}<svg class="i" aria-hidden="true"><use href="#i-x"/></svg>{% endraw %}</button>
-        <div class="dlg"></div>
-    </dialog>
     <div class="toasts" id="toasts" aria-live="polite"></div>
-
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     {% block extra_js %}{% endblock %}
 </body>

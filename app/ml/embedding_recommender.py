@@ -6,20 +6,33 @@ MovieMind v2 recommender: mood-shifted nearest-neighbour search in one embedding
                       then a cluster-based diversity cap of max(2, k // 3) per region.
 """
 import numpy as np
-from app.models import Movie, User, UserFavorite
+from app.models import Movie, User, UserFavorite, UserLike
 from app.ml.embeddings import get_store, unit, EmbeddingStore
-from app.ml.explainer import geometric_explanation
+from app.ml.explainer import geometric_explanation, hybrid_explanation
+from app.ml import hybrid as H
 
 DEFAULT_LAMBDA = 0.3
 
 
 class EmbeddingRecommender:
-    engine = 'v2-embedding'
-
-    def __init__(self, store=None):
+    def __init__(self, store=None, stats=None, config=None):
+        """
+        stats / config enable the hybrid ranking (content + collaborative + quality, mood as re-ranker).
+        When no stats are given and the store is the default one, they are loaded from data/models;
+        a store passed without stats uses the content-only search (used by unit tests).
+        """
+        default = store is None
         self.store = store or get_store()
         if self.store is None:
             raise FileNotFoundError('Embeddings not built - run scripts/build_embeddings.py')
+        if default and stats is None:
+            from app.ml.embeddings import MODELS_DIR
+            stats = H.load_stats(MODELS_DIR)
+            config = config or H.load_config(MODELS_DIR)
+        self.stats = stats
+        self.config = config or {'weights': dict(H.DEFAULT_WEIGHTS), 'candidates': H.CANDIDATES}
+        self.priors = H.prior_components(stats) if stats is not None else None
+        self.engine = 'v2.1-hybrid' if stats is not None else 'v2-embedding'
 
     # -- taste ------------------------------------------------------------
     def _cold_start_taste(self, user):
@@ -51,15 +64,20 @@ class EmbeddingRecommender:
         mood = mood.lower() if mood else None
         store = self.store
 
-        liked_ids = [f.movie_id for f in UserFavorite.query.filter_by(user_id=user_id).all()]
+        liked_ids = [l.movie_id for l in UserLike.query.filter_by(user_id=user_id).all()]   # preference signal
         liked_rows = [store.id_to_row[i] for i in liked_ids if i in store.id_to_row]
         taste = self.taste_for(user, liked_ids)
+        if self.stats is not None:
+            return self._hybrid(user_id, taste, liked_ids, liked_rows, mood, limit, lam, exclude_favorites)
+        # titles the user has already engaged with (liked or favourited) are not suggested again
+        seen_ids = set(liked_ids) | {f.movie_id for f in UserFavorite.query.filter_by(user_id=user_id).all()}
+        seen_rows = [store.id_to_row[i] for i in seen_ids if i in store.id_to_row]
 
         sims = store.scores(store.search_position(taste, mood, lam))
         sims_plain = store.scores(taste)
         if exclude_favorites:
-            sims[liked_rows] = -np.inf
-            sims_plain[liked_rows] = -np.inf
+            sims[seen_rows] = -np.inf
+            sims_plain[seen_rows] = -np.inf
 
         order = np.argsort(-sims)
         rank_with = np.empty(len(order), dtype='int64'); rank_with[order] = np.arange(1, len(order) + 1)
@@ -84,12 +102,43 @@ class EmbeddingRecommender:
                 'genres': movie.get_genres_list(),
                 'overview': movie.overview,
                 'poster_url': movie.get_poster_url(),
+                'backdrop_url': movie.get_backdrop_url(),
+                'runtime': movie.runtime,
                 'vote_average': movie.vote_average,
                 'director': movie.director,
                 'cast': movie.get_cast_list()[:3],
                 'score': round(float(sims[r]), 3),
                 'explanation': ex['text'],
                 'explanation_detail': ex,
+            })
+        return results
+
+    # -- hybrid ranking ------------------------------------------------------------
+    def _hybrid(self, user_id, taste, liked_ids, liked_rows, mood, limit, lam, exclude_favorites):
+        store, w = self.store, self.config['weights']
+        comps = H.user_components(store, self.stats, taste, liked_rows, self.priors, cf_gamma=self.config.get('cf_gamma', 0.0))
+        base = H.combine(comps, w)
+        seen_ids = set(liked_ids) | {f.movie_id for f in UserFavorite.query.filter_by(user_id=user_id).all()}
+        seen_rows = [store.id_to_row[i] for i in seen_ids if i in store.id_to_row] if exclude_favorites else \
+                    [store.id_to_row[i] for i in liked_ids if i in store.id_to_row]
+        mood_dir = store.mood_vectors.get(mood) if mood else None
+        ranked = H.rerank(store, base, seen_rows, mood_dir, lam, limit, self.config.get('candidates', H.CANDIDATES))
+
+        movies = {m.movie_id: m for m in Movie.query.filter(Movie.movie_id.in_([int(store.ids[x['row']]) for x in ranked])).all()}
+        liked_titles = {m.movie_id: m.title for m in Movie.query.filter(Movie.movie_id.in_(liked_ids)).all()} if liked_ids else {}
+        results = []
+        for x in ranked:
+            movie = movies.get(int(store.ids[x['row']]))
+            if movie is None:
+                continue
+            ex = hybrid_explanation(store, x['row'], taste, comps, w, liked_rows, liked_titles, movie, mood, lam,
+                                    x['base_rank'], x['final_rank'])
+            results.append({
+                'movie_id': movie.movie_id, 'title': movie.title, 'release_year': movie.release_year,
+                'genres': movie.get_genres_list(), 'overview': movie.overview, 'poster_url': movie.get_poster_url(),
+                'backdrop_url': movie.get_backdrop_url(), 'runtime': movie.runtime, 'vote_average': movie.vote_average,
+                'director': movie.director, 'cast': movie.get_cast_list()[:3],
+                'score': round(x['final'], 3), 'explanation': ex['text'], 'explanation_detail': ex,
             })
         return results
 

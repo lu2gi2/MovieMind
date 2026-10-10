@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from app import create_app, db
-from app.models import User, Movie, UserFavorite
+from app.models import User, Movie, UserFavorite, UserLike
 from app.ml.embeddings import EmbeddingStore, MOODS, MOOD_KEYWORDS, unit
 from app.ml.embedding_recommender import EmbeddingRecommender
 from app.ml.explainer import geometric_explanation
@@ -52,7 +52,7 @@ def world(app, synth):
 
 def like(user, *ids):
     for i in ids:
-        db.session.add(UserFavorite(user_id=user.user_id, movie_id=i))
+        db.session.add(UserLike(user_id=user.user_id, movie_id=i))
     db.session.commit()
 
 
@@ -97,7 +97,7 @@ def test_tc05_unlike_recomputes_centroid_from_remaining(world, synth):
     from app.ml.taste_updater import refresh_embedding_taste
     like(u, 3, 25, 45)
     refresh_embedding_taste(u.user_id, synth)
-    UserFavorite.query.filter_by(user_id=u.user_id, movie_id=25).delete(); db.session.commit()
+    UserLike.query.filter_by(user_id=u.user_id, movie_id=25).delete(); db.session.commit()
     t = refresh_embedding_taste(u.user_id, synth)
     assert np.allclose(t, synth.centroid([3, 45]), atol=1e-5)
     assert np.allclose(np.array(User.query.get(u.user_id).get_taste_embedding()), t, atol=1e-4)

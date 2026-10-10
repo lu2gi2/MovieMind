@@ -1,72 +1,53 @@
 {% extends "base.html" %}
-{% block title %}Join{% endblock %}
+{% block title %}Create account{% endblock %}
+{% block bgmode %}strong{% endblock %}
 
-{% block content %}
+{% block pub %}
 <div class="auth">
-    <aside class="auth-aside">
-        <div>
-            <p class="eyebrow" style="color:#CFC8B8">Join MovieMind</p>
-            <h2 style="margin-top:16px">Tell us where to <em>start</em> the walk.</h2>
+    <div class="panel">
+        <h1>Create your account</h1>
+        <div class="stepper" aria-label="Progress"><span class="on" id="s1">1 · Account</span><span id="s2">2 · Starting genres</span></div>
+        <div id="err" class="note note--error" role="alert" hidden></div>
+        <form id="step1" novalidate>
+            <div class="field"><label for="username">Username</label><input class="input" id="username" autocomplete="username" minlength="3" required></div>
+            <div class="field"><label for="email">Email</label><input class="input" id="email" type="email" autocomplete="email" required></div>
+            <div class="field"><label for="password">Password</label><input class="input" id="password" type="password" autocomplete="new-password" minlength="6" required><span class="muted small">At least 6 characters.</span></div>
+            <button class="btn btn--block" type="submit">Continue</button>
+        </form>
+        <div id="step2" hidden>
+            <p class="label" style="margin-bottom:10px">Pick at least two genres you enjoy</p>
+            <div class="chips" id="genres" style="margin-bottom:24px"></div>
+            <div style="display:flex;gap:10px"><button class="btn btn--ghost" id="back" type="button">Back</button><button class="btn btn--block" id="go" type="button" disabled>Create account</button></div>
         </div>
-        <svg class="vibe" id="side-vibe" aria-hidden="true"></svg>
-        <p>Two quick steps. The genres you pick only seed your first suggestions; your likes take over from there.</p>
-    </aside>
-    <div class="auth-main">
-        <div class="auth-form">
-            <h1>Create account</h1>
-            <div class="steps" aria-label="Progress"><span class="on" id="s1">01 Account</span><span id="s2">02 Starting genres</span></div>
-            <div id="signup-error" class="note" role="alert" hidden></div>
-            <div id="signup-success" class="note note--ok" role="status" hidden></div>
-
-            <form id="step1-form">
-                <div class="field"><label for="username">Username</label><input class="input" id="username" autocomplete="username" minlength="3" required placeholder="At least 3 characters"></div>
-                <div class="field"><label for="email">Email</label><input class="input" type="email" id="email" autocomplete="email" required placeholder="you@example.com"></div>
-                <div class="field"><label for="password">Password</label><input class="input" type="password" id="password" autocomplete="new-password" minlength="6" required placeholder="At least 6 characters"></div>
-                <button class="btn btn--block" type="submit">Next: starting genres {% raw %}<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg>{% endraw %}</button>
-            </form>
-
-            <div id="step2" hidden>
-                <p class="field-label" style="margin-bottom:12px">Pick at least two you enjoy</p>
-                <div class="chips" id="genre-grid" style="margin-bottom:32px"></div>
-                <div style="display:flex;gap:12px">
-                    <button class="btn btn--ghost" id="back-btn" type="button">Back</button>
-                    <button class="btn btn--block" id="signup-btn" type="button" disabled>Create account</button>
-                </div>
-            </div>
-            <p class="alt">Already joined? <a href="/login">Log in</a></p>
-        </div>
+        <p class="alt">Already have an account? <a href="/login">Log in</a></p>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-drawVibe(document.getElementById('side-vibe'), { lam: 0.2, mood: 'adventurous' });
-let account = {};
-const $ = id => document.getElementById(id);
-const picked = () => [...document.querySelectorAll('#genre-grid input:checked')].map(i => i.value);
-
+let acct = {};
+const picked = () => [...document.querySelectorAll('#genres input:checked')].map((i) => i.value);
+const show = (msg) => { $('err').textContent = msg; $('err').hidden = !msg; };
 (async () => {
-    const { data } = await json('/api/genres');
-    $('genre-grid').innerHTML = (data.genres || []).map(g => `<label class="chip"><input type="checkbox" value="${esc(g)}"><span>${esc(g)}</span></label>`).join('');
-    $('genre-grid').addEventListener('change', () => { $('signup-btn').disabled = picked().length < 2; });
+    const { data } = await get('/api/genres');
+    $('genres').innerHTML = (data.genres || []).map((g) => `<label class="chk"><input type="checkbox" value="${esc(g)}"><span>${esc(g)}</span></label>`).join('');
+    $('genres').addEventListener('change', () => { $('go').disabled = picked().length < 2; });
 })();
-
-$('step1-form').addEventListener('submit', e => {
-    e.preventDefault();
-    account = { username: $('username').value.trim(), email: $('email').value.trim(), password: $('password').value };
-    $('step1-form').hidden = true; $('step2').hidden = false;
-    $('s1').className = 'done'; $('s2').className = 'on';
+$('step1').addEventListener('submit', (e) => {
+    e.preventDefault(); show('');
+    acct = { username: $('username').value.trim(), email: $('email').value.trim(), password: $('password').value };
+    if (acct.username.length < 3) return show('Choose a username with at least 3 characters.');
+    if (!acct.email.includes('@')) return show('Enter a valid email address.');
+    if (acct.password.length < 6) return show('Your password needs at least 6 characters.');
+    $('step1').hidden = true; $('step2').hidden = false; $('s1').className = 'done'; $('s2').className = 'on';
 });
-$('back-btn').addEventListener('click', () => { $('step2').hidden = true; $('step1-form').hidden = false; $('s1').className = 'on'; $('s2').className = ''; });
-
-$('signup-btn').addEventListener('click', async function () {
-    const err = $('signup-error'); err.hidden = true; this.disabled = true; this.textContent = 'Drawing your map…';
-    try {
-        const { ok, data } = await post('/api/auth/signup', { ...account, preferred_genres: picked() });
-        if (ok) { $('signup-success').textContent = 'You’re in. Taking you to tonight’s picks…'; $('signup-success').hidden = false; setTimeout(() => location.href = '/dashboard', 900); return; }
-        err.textContent = data.error || 'We couldn’t create that account.'; err.hidden = false;
-    } catch (x) { err.textContent = 'Couldn’t reach the server. Check your connection and retry.'; err.hidden = false; }
+$('back').addEventListener('click', () => { $('step2').hidden = true; $('step1').hidden = false; $('s1').className = 'on'; $('s2').className = ''; });
+$('go').addEventListener('click', async function () {
+    show(''); this.disabled = true; this.textContent = 'Creating account…';
+    const r = await api('/api/auth/signup', { method: 'POST', body: { ...acct, preferred_genres: picked() } });
+    if (r.ok) { location.href = '/dashboard'; return; }
+    show(r.status === 0 ? 'We couldn’t reach the server. Try again.' : (r.data.error || 'We couldn’t create that account.'));
     this.disabled = picked().length < 2; this.textContent = 'Create account';
 });
 </script>

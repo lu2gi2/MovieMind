@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Watchlist{% endblock %}
+{% block bgmode %}soft{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div><h1>Watchlist</h1><p>Titles you’re saving for later.</p></div>
+    <div class="field" style="margin:0"><label for="sort">Sort by</label>
+        <select class="select" id="sort"><option value="added">Recently added</option><option value="title">Title A–Z</option><option value="year">Newest release</option><option value="rating">Highest rated</option></select></div>
+</div>
+<div class="grid" id="grid" aria-busy="true"></div>
+<div id="empty" hidden><div class="empty"><h2>Your next great watch starts here.</h2><p>Save movies to find them easily later.</p><a class="btn" href="/dashboard">Find something to watch</a></div></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const KIND = 'watch', KEY = 'watchlist';
+let items = [];
+const sorters = { added: () => 0, title: (a, b) => a.title.localeCompare(b.title), year: (a, b) => (b.release_year || 0) - (a.release_year || 0), rating: (a, b) => (b.vote_average || 0) - (a.vote_average || 0) };
+function render() {
+    const list = items.slice().sort(sorters[$('sort').value]);
+    $('grid').innerHTML = gridHTML(list);
+    $('empty').hidden = list.length > 0; $('sort').disabled = !list.length;
+}
+(async () => {
+    await Store.load();
+    const { ok, data } = await get('/api/user/' + KEY + '?per_page=100');
+    $('grid').removeAttribute('aria-busy');
+    if (!ok) { $('grid').innerHTML = errorHTML(data.error || 'We couldn’t load this list.'); return; }
+    items = data[KEY]; render();
+    $('sort').addEventListener('change', render);
+    // removing a title here takes it off the page; the shared store keeps every other page in sync
+    Store.on((d) => { if (d.done && d.kind === KIND && !Store.has(KIND, d.id)) { items = items.filter((m) => m.movie_id !== d.id); render(); } });
+})();
+</script>
+{% endblock %}

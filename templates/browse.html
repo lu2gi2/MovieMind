@@ -1,67 +1,89 @@
 {% extends "base.html" %}
-{% block title %}Browse{% endblock %}
+{% block title %}Movies{% endblock %}
+{% block bgmode %}soft{% endblock %}
 
 {% block content %}
-<div class="wrap page">
-    <div class="page-head">
-        <div><p class="eyebrow">The catalogue</p><h1 style="font-size:clamp(2.2rem,4vw,3.4rem);margin-top:12px">Browse <em>the map</em></h1></div>
-        <p class="lede" style="font-size:1rem;max-width:34ch">Find films to like. Every like moves your spot.</p>
-    </div>
-
-    <form class="filters" id="filters" role="search">
-        <div class="field"><label for="search-input">Title</label><input class="input" id="search-input" type="search" placeholder="Heat, Amélie, anything…"></div>
-        <div class="field"><label for="genre-filter">Genre</label><select class="select" id="genre-filter"><option value="">All genres</option></select></div>
-        <div class="field"><label for="sort-filter">Order</label>
-            <select class="select" id="sort-filter"><option value="popularity">Most popular</option><option value="rating">Best rated</option><option value="year">Newest</option><option value="title">A to Z</option></select></div>
-        <button class="btn" type="submit">{% raw %}<svg class="i" aria-hidden="true"><use href="#i-search"/></svg>{% endraw %} Search</button>
-    </form>
-
-    <p class="count mono" id="count" aria-live="polite">&nbsp;</p>
-    <div class="cards" id="grid"></div>
-    <nav class="pager" id="pager" aria-label="Pages"></nav>
+<div class="page-head">
+    <div><h1>Movies</h1><p>Browse the catalogue. Like the ones you enjoy and MovieMind learns your taste.</p></div>
 </div>
+
+<form class="toolbar" id="filters" aria-label="Filters">
+    <div class="field"><label for="f-genre">Genre</label><select class="select" id="f-genre"><option value="">All genres</option></select></div>
+    <div class="field"><label for="f-year">Release year</label><input class="input" id="f-year" type="number" inputmode="numeric" min="1900" max="2100" placeholder="Any" style="min-width:110px"></div>
+    <div class="field"><label for="f-mood">Mood</label><select class="select" id="f-mood"><option value="">Any mood</option></select></div>
+    <div class="field"><label for="f-sort">Sort by</label>
+        <select class="select" id="f-sort"><option value="popularity">Most popular</option><option value="rating">Highest rated</option><option value="year">Newest</option><option value="title">Title A–Z</option></select></div>
+</form>
+<div class="activebar" id="active" aria-live="polite"></div>
+<p class="count" id="count" aria-live="polite">&nbsp;</p>
+<div class="grid" id="grid" aria-busy="true"></div>
+<nav class="pager" id="pager" aria-label="Pagination"></nav>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-const $ = id => document.getElementById(id);
-let page = 1;
+const q = { search: '', genre: '', year: '', mood: '', sort: 'popularity', page: 1 };
+let seq = 0, timer = 0;
+const gs = $('global-search');
 
-async function load(p = 1) {
-    page = p;
-    const q = new URLSearchParams({ page: p, per_page: 12, sort: $('sort-filter').value });
-    if ($('search-input').value.trim()) q.set('search', $('search-input').value.trim());
-    if ($('genre-filter').value) q.set('genre', $('genre-filter').value);
-    $('grid').innerHTML = Array.from({ length: 8 }, () => `<div><div class="skel skel--poster"></div><div class="skel skel--line"></div></div>`).join('');
-    const { ok, data } = await json('/api/movies?' + q);
-    if (!ok) { $('grid').innerHTML = `<div class="empty" style="grid-column:1/-1"><h3>The shelf wouldn’t open.</h3><button class="btn" onclick="load(1)">Try again</button></div>`; return; }
-    $('count').textContent = `${data.total} film${data.total === 1 ? '' : 's'} · page ${data.page} of ${Math.max(data.pages, 1)}`;
-    $('grid').innerHTML = data.movies.length
-        ? data.movies.map((m, i) => cardHTML(m, { i })).join('')
-        : `<div class="empty" style="grid-column:1/-1"><h3>No film by that name.</h3><p>Try fewer letters, or clear the genre filter.</p></div>`;
+function fromURL() {
+    const p = new URLSearchParams(location.search);
+    ['search', 'genre', 'year', 'mood', 'sort'].forEach((k) => { if (p.get(k)) q[k] = p.get(k); });
+    q.page = +p.get('page') || 1;
+}
+function toURL() {
+    const p = new URLSearchParams();
+    ['search', 'genre', 'year', 'mood', 'sort'].forEach((k) => { if (q[k] && !(k === 'sort' && q[k] === 'popularity')) p.set(k, q[k]); });
+    if (q.page > 1) p.set('page', q.page);
+    history.replaceState(null, '', p.toString() ? '?' + p : location.pathname);
+}
+function paintControls() {
+    gs.value = q.search; $('f-genre').value = q.genre; $('f-year').value = q.year; $('f-mood').value = q.mood; $('f-sort').value = q.sort;
+    $('f-sort').disabled = !!q.mood;
+    const chips = [];
+    const add = (k, label) => q[k] && chips.push(`<span class="chip chip--x is-on">${esc(label)}<button type="button" data-clear="${k}" aria-label="Remove filter ${esc(label)}">${icon('x', 'i--sm')}</button></span>`);
+    add('search', `“${q.search}”`); add('genre', q.genre); add('year', q.year); add('mood', 'Mood: ' + q.mood);
+    $('active').innerHTML = chips.length ? chips.join('') + '<button type="button" class="link small" data-clear="all">Clear all</button>' : '';
+}
+
+async function load() {
+    const mine = ++seq; toURL(); paintControls();
+    $('grid').setAttribute('aria-busy', 'true'); $('grid').innerHTML = skeleton(12);
+    const p = new URLSearchParams({ page: q.page, per_page: 20 });
+    if (q.search) p.set('search', q.search); if (q.genre) p.set('genre', q.genre); if (q.year) p.set('year', q.year);
+    if (q.mood) p.set('mood', q.mood); else p.set('sort', q.sort);
+    const { ok, data } = await get('/api/movies?' + p);
+    if (mine !== seq) return;
+    $('grid').removeAttribute('aria-busy');
+    if (!ok) { $('grid').innerHTML = errorHTML(data.error || 'We couldn’t load movies.', 'load()'); $('count').textContent = ''; $('pager').innerHTML = ''; return; }
+    $('count').textContent = `${data.total.toLocaleString()} title${data.total === 1 ? '' : 's'}${q.mood ? ` · ordered by how well they fit “${q.mood}”` : ''}`;
+    $('grid').innerHTML = data.movies.length ? gridHTML(data.movies) : emptyHTML('No titles match', 'Try a different spelling or remove a filter.', null);
     pager(data.page, data.pages);
 }
-
 function pager(cur, total) {
     if (total <= 1) { $('pager').innerHTML = ''; return; }
-    const set = new Set([1, total, cur - 1, cur, cur + 1]);
-    const nums = [...set].filter(n => n >= 1 && n <= total).sort((a, b) => a - b);
-    let html = `<button ${cur === 1 ? 'disabled' : ''} data-p="${cur - 1}" aria-label="Previous page">←</button>`, prev = 0;
-    nums.forEach(n => { if (n - prev > 1) html += `<button disabled>…</button>`; html += `<button data-p="${n}" ${n === cur ? 'aria-current="page"' : ''}>${n}</button>`; prev = n; });
-    html += `<button ${cur === total ? 'disabled' : ''} data-p="${cur + 1}" aria-label="Next page">→</button>`;
-    $('pager').innerHTML = html;
+    const nums = [...new Set([1, total, cur - 1, cur, cur + 1])].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b);
+    let h = `<button data-p="${cur - 1}" ${cur === 1 ? 'disabled' : ''} aria-label="Previous page">←</button>`, prev = 0;
+    nums.forEach((n) => { if (n - prev > 1) h += '<button disabled aria-hidden="true">…</button>'; h += `<button data-p="${n}" ${n === cur ? 'aria-current="page"' : ''}>${n}</button>`; prev = n; });
+    $('pager').innerHTML = h + `<button data-p="${cur + 1}" ${cur === total ? 'disabled' : ''} aria-label="Next page">→</button>`;
 }
+const reset = () => { q.page = 1; load(); };
 
 (async () => {
-    await checkAuth(); await loadFavIds();
-    bindCards($('grid'));
-    $('pager').addEventListener('click', e => { const b = e.target.closest('[data-p]'); if (b && !b.disabled) { load(+b.dataset.p); scrollTo({ top: 0, behavior: 'smooth' }); } });
-    $('filters').addEventListener('submit', e => { e.preventDefault(); load(1); });
-    $('genre-filter').addEventListener('change', () => load(1));
-    $('sort-filter').addEventListener('change', () => load(1));
-    const { data } = await json('/api/genres');
-    (data.genres || []).forEach(g => $('genre-filter').insertAdjacentHTML('beforeend', `<option value="${esc(g)}">${esc(g)}</option>`));
-    load(1);
+    fromURL();
+    const [g, m] = await Promise.all([get('/api/genres'), get('/api/moods')]);
+    (g.data.genres || []).forEach((x) => $('f-genre').insertAdjacentHTML('beforeend', `<option>${esc(x)}</option>`));
+    (m.data.moods || []).forEach((x) => $('f-mood').insertAdjacentHTML('beforeend', `<option value="${esc(x.id)}">${esc(x.label)}</option>`));
+    gs.closest('form').addEventListener('submit', (e) => { e.preventDefault(); q.search = gs.value.trim(); reset(); });
+    gs.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => { q.search = gs.value.trim(); reset(); }, 300); });
+    $('f-genre').addEventListener('change', (e) => { q.genre = e.target.value; reset(); });
+    $('f-mood').addEventListener('change', (e) => { q.mood = e.target.value; reset(); });
+    $('f-sort').addEventListener('change', (e) => { q.sort = e.target.value; reset(); });
+    $('f-year').addEventListener('input', (e) => { clearTimeout(timer); timer = setTimeout(() => { const v = e.target.value; q.year = /^\d{4}$/.test(v) ? v : ''; if (!v || q.year) reset(); }, 400); });
+    $('filters').addEventListener('submit', (e) => e.preventDefault());
+    $('active').addEventListener('click', (e) => { const b = e.target.closest('[data-clear]'); if (!b) return; if (b.dataset.clear === 'all') Object.assign(q, { search: '', genre: '', year: '', mood: '' }); else q[b.dataset.clear] = ''; reset(); });
+    $('pager').addEventListener('click', (e) => { const b = e.target.closest('[data-p]'); if (b && !b.disabled) { q.page = +b.dataset.p; load(); scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); } });
+    await Store.load(); load();
 })();
 </script>
 {% endblock %}

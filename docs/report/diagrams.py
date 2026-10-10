@@ -147,8 +147,8 @@ def fig_2_1():
     c.arrow([(1230, 455), (1170, 455)], NAVY, 3)
     c.arrow([(930, 455), (870, 455)], NAVY, 3)
     c.arrow([(930, 205), (870, 205)], NAVY, 0)
-    c.text(750, 590, "search_position = user_taste + lambda x mood_direction", 22, True, NAVY)
-    c.text(750, 640, "recommendations = top-k movies by cosine similarity to search_position", 18, False, GREY)
+    c.text(750, 590, "base = content + collaborative + quality + popularity;   mood re-ranks the top 60 (lambda)", 20, True, NAVY)
+    c.text(750, 640, "recommendations = top-k after mood re-ranking and the diversity cap", 18, False, GREY)
     c.save("fig_2_1_block.png")
 
 
@@ -176,9 +176,9 @@ def fig_2_2():
     c.arrow([(270, 495), (330, 495)], NAVY, 3)
     c.arrow([(590, 495), (650, 495)], NAVY, 3)
     c.box(40, 640, 230, 100, "User picks mood\nand lambda", LBLUE, NAVY, fs=16, bold=True)
-    c.box(330, 640, 260, 100, "Compute search position\ntaste + lambda x mood", LTEAL, TEAL, fs=16, bold=True)
-    c.box(650, 640, 260, 100, "Cosine similarity to\nall movie embeddings", LTEAL, TEAL, fs=16, bold=True)
-    c.box(970, 640, 240, 100, "Exclude liked +\ndiversity filter", LTEAL, TEAL, fs=16, bold=True)
+    c.box(330, 640, 260, 100, "Blend content + collab +\nquality scores (top 60)", LTEAL, TEAL, fs=16, bold=True)
+    c.box(650, 640, 260, 100, "Mood re-rank (lambda)\n+ diversity cap", LTEAL, TEAL, fs=16, bold=True)
+    c.box(970, 640, 240, 100, "Exclude liked and\nfavourited titles", LTEAL, TEAL, fs=16, bold=True)
     c.box(1260, 640, 200, 100, "Top-k + geometric\nexplanations", LGREEN, GREEN, fs=16, bold=True)
     for a, b in [(270, 330), (590, 650), (910, 970), (1210, 1260)]:
         c.arrow([(a, 690), (b, 690)], NAVY, 3)
@@ -189,7 +189,7 @@ def fig_2_2():
     c.box(1260, 450, 200, 90, "mood_vectors.npy", LORANGE, ORANGE, fs=15, bold=True)
     c.arrow([(1100, 540), (1100, 600), (780, 600), (780, 640)], PURPLE, 2)
     c.arrow([(1360, 540), (1360, 580), (520, 580), (520, 640)], ORANGE, 2)
-    c.text(750, 790, "Data stores: SQLite (movies, users, favourites, interactions) and two NumPy matrices loaded once at start-up.", 15, False, GREY, italic=True)
+    c.text(750, 790, "Stores: SQLite (movies, users, likes, favourites, watchlist) and NumPy arrays loaded at start-up; item_stats.npz (quality, popularity, item-item similarity) is built offline from MovieLens ratings.", 13, False, GREY, italic=True, maxw=1300)
     c.box(40, 840, 1420, 100, "Response (JSON): movie id, title, genres, similarity score, taste contribution, mood contribution, nearest liked movie, rank change caused by mood", LGREEN, GREEN, fs=16)
     c.arrow([(1360, 740), (1360, 840)], GREEN, 3)
     c.save("fig_2_2_dfd.png")
@@ -228,45 +228,47 @@ def fig_2_3():
 
 # ---------------------------------------------------------------- 2.4
 def fig_2_4():
-    c = Canvas(1400, 1250)
-    title(c, "Activity diagram - mood-shifted recommendation")
+    c = Canvas(1400, 1330)
+    title(c, "Activity diagram - hybrid recommendation with mood re-ranking")
     cx = 500
     c.dot(cx, 70, 14, "black")
-    steps = [(130, "User requests recommendations (mood, lambda, k)"), (215, "Load user taste vector from database")]
-    for y, t in steps:
-        c.box(cx - 190, y, 380, 55, t, LBLUE, NAVY, fs=16)
-    c.arrow([(cx, 84), (cx, 130)], "black", 2)
-    c.arrow([(cx, 185), (cx, 215)], "black", 2)
-    c.arrow([(cx, 270), (cx, 305)], "black", 2)
-    c.diamond(cx, 345, 330, 80, "Has liked movies?")
-    c.box(880, 318, 330, 55, "Cold start: preferred-genre\ncentroid, else global mean", LGREY, GREY, fs=15)
-    c.arrow([(cx + 165, 345), (880, 345)], "black", 2)
-    c.text(cx + 200, 330, "No", 15, True)
-    c.arrow([(cx, 385), (cx, 440)], "black", 2)
-    c.text(cx + 25, 412, "Yes", 15, True)
-    c.box(cx - 190, 440, 380, 55, "Taste = unit centroid of liked embeddings", LTEAL, TEAL, fs=16)
-    c.arrow([(1045, 373), (1045, 468), (cx + 190, 468)], "black", 2)
-    c.arrow([(cx, 495), (cx, 535)], "black", 2)
-    c.diamond(cx, 575, 360, 80, "Mood chosen and lambda > 0?")
-    c.box(880, 548, 330, 55, "search = taste", LGREY, GREY, fs=16)
-    c.arrow([(cx + 180, 575), (880, 575)], "black", 2)
-    c.text(cx + 215, 560, "No", 15, True)
-    c.arrow([(cx, 615), (cx, 670)], "black", 2)
-    c.text(cx + 25, 642, "Yes", 15, True)
-    c.box(cx - 220, 670, 440, 60, "search = taste + lambda x mood_direction", LORANGE, ORANGE, fs=16, bold=True)
-    c.arrow([(1045, 603), (1045, 700), (cx + 220, 700)], "black", 2)
-    c.arrow([(cx, 730), (cx, 775)], "black", 2)
-    rest = [(775, "Cosine similarity: search vs. every movie embedding", LTEAL, TEAL), (860, "Exclude movies the user already liked", LTEAL, TEAL),
-            (945, "Sort by similarity (descending)", LTEAL, TEAL), (1030, "Diversity filter (max per vibe region)", LTEAL, TEAL),
-            (1115, "Compute explanations for top-k movies", LGREEN, GREEN)]
-    for i, (y, t, f, o) in enumerate(rest):
+    c.box(cx - 190, 120, 380, 55, "User requests recommendations (mood, lambda, k)", LBLUE, NAVY, fs=16)
+    c.arrow([(cx, 84), (cx, 120)], "black", 2)
+    c.box(cx - 190, 205, 380, 55, "Load liked titles and taste centroid", LBLUE, NAVY, fs=16)
+    c.arrow([(cx, 175), (cx, 205)], "black", 2)
+    c.arrow([(cx, 260), (cx, 295)], "black", 2)
+    c.diamond(cx, 335, 330, 80, "Has liked titles?")
+    c.box(880, 308, 330, 60, "Cold start: preferred-genre\ncentroid; no collaborative part", LGREY, GREY, fs=15)
+    c.arrow([(cx + 165, 335), (880, 335)], "black", 2)
+    c.text(cx + 200, 320, "No", 15, True)
+    c.arrow([(cx, 375), (cx, 430)], "black", 2)
+    c.text(cx + 25, 402, "Yes", 15, True)
+    c.box(cx - 220, 430, 440, 70, "Score every movie: content similarity,\ncollaborative score (liked together), quality, popularity", LTEAL, TEAL, fs=15)
+    c.arrow([(1045, 368), (1045, 465), (cx + 220, 465)], "black", 2)
+    steps = [(550, "Blend: base = sum of weight x z-score", LTEAL, TEAL), (635, "Exclude titles already liked or favourited", LTEAL, TEAL),
+             (720, "Retrieve the top 60 candidates by base score", LTEAL, TEAL)]
+    c.arrow([(cx, 500), (cx, 550)], "black", 2)
+    for i, (y, t, f, o) in enumerate(steps):
         c.box(cx - 220, y, 440, 55, t, f, o, fs=16)
-        if i < len(rest) - 1:
-            c.arrow([(cx, y + 55), (cx, rest[i + 1][0])], "black", 2)
-    c.arrow([(cx, 1170), (cx, 1205)], "black", 2)
-    c.dot(cx, 1218, 14, "black")
-    c.d.ellipse([(cx - 20) * S, (1218 - 20) * S, (cx + 20) * S, (1218 + 20) * S], outline="black", width=2 * S)
-    c.text(cx + 120, 1218, "Return JSON", 15, False, GREY, italic=True, anchor="lm")
+        if i < len(steps) - 1:
+            c.arrow([(cx, y + 55), (cx, steps[i + 1][0])], "black", 2)
+    c.arrow([(cx, 775), (cx, 810)], "black", 2)
+    c.diamond(cx, 850, 380, 80, "Mood chosen and lambda > 0?")
+    c.box(880, 823, 330, 55, "final = base", LGREY, GREY, fs=16)
+    c.arrow([(cx + 190, 850), (880, 850)], "black", 2)
+    c.text(cx + 225, 835, "No", 15, True)
+    c.arrow([(cx, 890), (cx, 940)], "black", 2)
+    c.text(cx + 25, 917, "Yes", 15, True)
+    c.box(cx - 250, 940, 500, 64, "final = (1 - lambda) x base + lambda x mood fit\n(re-orders the candidates only)", LORANGE, ORANGE, fs=15, bold=True)
+    c.arrow([(1045, 878), (1045, 972), (cx + 250, 972)], "black", 2)
+    c.arrow([(cx, 1004), (cx, 1050)], "black", 2)
+    c.box(cx - 220, 1050, 440, 55, "Diversity cap per vibe region; take top k", LTEAL, TEAL, fs=16)
+    c.arrow([(cx, 1105), (cx, 1145)], "black", 2)
+    c.box(cx - 220, 1145, 440, 55, "Explain each pick from the numbers", LGREEN, GREEN, fs=16)
+    c.arrow([(cx, 1200), (cx, 1245)], "black", 2)
+    c.dot(cx, 1258, 14, "black")
+    c.d.ellipse([(cx - 20) * S, (1258 - 20) * S, (cx + 20) * S, (1258 + 20) * S], outline="black", width=2 * S)
+    c.text(cx + 120, 1258, "Return JSON", 15, False, GREY, italic=True, anchor="lm")
     c.save("fig_2_4_activity.png")
 
 
@@ -324,14 +326,14 @@ def fig_2_6():
             ["set_password(pw) / check_password(pw)", "get_taste_vector() / set_taste_vector(v)"])
     m = cls(30, 470, 400, "Movie", ["movie_id, tmdb_id: int", "title, director: str", "overview, tagline: text", "genres, cast, keywords: JSON", "vote_average, popularity: float"],
             ["get_genres_list() / get_cast_list()", "to_dict()"])
-    f = cls(30, 790, 400, "UserFavorite / UserInteraction", ["user_id, movie_id: FK", "interaction_type: like/unlike/view/rate", "rating, timestamp"], [])
+    f = cls(30, 790, 400, "UserLike / UserFavorite / UserWatchlist", ["user_id, movie_id: FK (unique pair)", "UserLike: preference signal (teaches taste)", "UserFavorite, UserWatchlist: collections only", "UserInteraction logs every action with its type"], [])
     e = cls(560, 80, 400, "EmbeddingStore", ["E: ndarray (N x 384), ids", "id_to_row: dict[int, int]", "mood_vectors: dict[str, ndarray]", "clusters: ndarray, global_mean"],
             ["load(models_dir)", "centroid(movie_ids)", "search_position(taste, mood, lam)", "scores(position), similar_to(id, n)"], PURPLE, LPURPLE)
     t = cls(560, 400, 400, "taste_updater", [], ["refresh_embedding_taste(user_id)", "# recomputes the unit centroid from the", "# favourites table on every like / unlike"], TEAL, LTEAL)
     r = cls(1040, 80, 430, "EmbeddingRecommender", ["store: EmbeddingStore", "DEFAULT_LAMBDA = 0.3"],
-            ["get_recommendations(user_id, mood, limit, lam)", "taste_for(user, liked_ids)", "_diverse(order, sims, k)", "get_similar_movies(movie_id, n)"], TEAL, LTEAL)
+            ["get_recommendations(user_id, mood, limit, lam)", "_hybrid(...)  # blend, retrieve, re-rank", "taste_for(user, liked_ids)", "get_similar_movies(movie_id, n)"], TEAL, LTEAL)
     x = cls(1040, 430, 430, "geometric_explanation", [], ["taste_match = cos(taste, movie)", "mood_effect = cos(search, movie) - taste_match", "nearest_liked, rank_without / with mood", "text built from these numbers"], GREEN, LGREEN)
-    b = cls(560, 700, 400, "build_embeddings.py (offline)", [], ["movie_text(movie)", "encode_texts(texts) -> ndarray", "compute_mood_vectors(emb, keywords)", "compute_clusters(emb)"], ORANGE, LORANGE)
+    b = cls(560, 700, 400, "offline scripts", [], ["build_embeddings.py: texts -> vectors, moods", "build_item_stats.py: quality, popularity,", "  item-item similarity (hybrid.py)", "evaluate_hybrid.py: held-out evaluation"], ORANGE, LORANGE)
     c.arrow([(430, 250), (560, 250)], GREY, 2, 10)
     c.arrow([(960, 230), (1040, 230)], GREY, 2, 10)
     c.arrow([(960, 480), (1040, 540)], GREY, 2, 10)
@@ -453,7 +455,7 @@ def fig_4_4():
 def fig_4_5():
     c = Canvas(1400, 760)
     title(c, "Layered software architecture")
-    layers = [("Presentation", "Custom CSS design system (no framework), HTML templates, vanilla JavaScript: mood list, lambda ruler, vibe map", LBLUE, NAVY),
+    layers = [("Presentation", "Sky Light design system (custom CSS), HTML templates, vanilla JavaScript: mood chips, lambda slider", LBLUE, NAVY),
               ("API / Application", "Flask 3 blueprints: auth, recommendation, user, pages;  Flask-Login sessions;  JSON REST endpoints", LTEAL, TEAL),
               ("Recommendation core", "NumPy / scikit-learn:  taste centroid, mood shift, cosine similarity, diversity filter, geometric explanations", LORANGE, ORANGE),
               ("Representation", "sentence-transformers (all-MiniLM-L6-v2):  movie_embeddings.npy, mood_vectors.npy  (built offline)", LPURPLE, PURPLE),
@@ -464,6 +466,29 @@ def fig_4_5():
         c.box(30, y, 250, 92, n, f, o, fs=19, bold=True)
         c.box(300, y, 1070, 92, d, "white", o, fs=16)
     c.save("fig_4_5_layers.png")
+
+
+def fig_3_2_hybrid():
+    c = Canvas(1500, 700)
+    title(c, "Hybrid ranking pipeline")
+    comps = [("Content", "cosine(taste, film)\nwhat the film is like", LPURPLE, PURPLE), ("Collaborative", "liked by people who\nliked what you liked", LBLUE, NAVY),
+             ("Quality", "smoothed mean rating", LGREEN, GREEN), ("Popularity", "log(1 + likes)", LGREY, GREY)]
+    for i, (n, d, f, o) in enumerate(comps):
+        y = 80 + i * 120
+        c.box(30, y, 300, 96, n + "\n" + d, f, o, fs=15, bold=False)
+        c.arrow([(330, y + 48), (430, 300)], o, 2)
+    c.box(430, 240, 260, 120, "Weighted blend of\nz-scores = base score\n(weights tuned on\nvalidation users)", LTEAL, TEAL, fs=15, bold=True)
+    c.arrow([(690, 300), (780, 300)], NAVY, 3)
+    c.box(780, 240, 220, 120, "Retrieve top 60\nunseen titles", LBLUE, NAVY, fs=16, bold=True)
+    c.arrow([(1000, 300), (1090, 300)], NAVY, 3)
+    c.box(1090, 190, 380, 220, "", LORANGE, ORANGE)
+    c.text(1280, 222, "Mood re-rank", 18, True, ORANGE)
+    c.text(1280, 300, "final = (1 - lambda) x base\n         + lambda x mood fit", 15, False, "black", mono=False)
+    c.text(1280, 372, "lambda = 0 leaves the order unchanged", 13, False, GREY, italic=True)
+    c.arrow([(1280, 410), (1280, 480)], NAVY, 3)
+    c.box(1090, 480, 380, 80, "Diversity cap, top k + explanations", LGREEN, GREEN, fs=16, bold=True)
+    c.box(430, 520, 560, 100, "The mood only reorders titles the engine already\njudged good, so it cannot pull in poor matches.", "white", GREY, fs=14, dash=True)
+    c.save("fig_3_2_hybrid.png")
 
 
 # ---------------------------------------------------------------- placeholders
@@ -477,7 +502,7 @@ def placeholder(name, label, w=1400, h=800):
 
 
 def all_figs():
-    for fn in [fig_2_1, fig_2_2, fig_2_3, fig_2_4, fig_2_5, fig_2_6, fig_4_1, fig_4_2, fig_4_3, fig_4_4, fig_4_5]:
+    for fn in [fig_2_1, fig_2_2, fig_2_3, fig_2_4, fig_2_5, fig_2_6, fig_3_2_hybrid, fig_4_1, fig_4_2, fig_4_3, fig_4_4, fig_4_5]:
         fn()
     placeholder("ph_5_1_login.png", "Screenshot: Login / Sign-up page", 1400, 700)
     placeholder("ph_5_2_dashboard.png", "Screenshot: Dashboard with mood selector and lambda slider")

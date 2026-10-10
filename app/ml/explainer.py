@@ -305,3 +305,55 @@ def geometric_explanation(store, row, taste, mood, lam, liked_rows, titles,
         'rank_with_mood': rank_with_mood,
         'text': ' · '.join(parts),
     }
+
+
+def hybrid_explanation(store, row, taste, comps, weights, liked_rows, titles, movie, mood, lam,
+                       base_rank=None, final_rank=None):
+    """
+    Explain a hybrid recommendation from the numbers that produced it.
+
+    comps: the user's z-scored component vectors; weights: blend weights. The reason is the component that
+    contributed most (weight x z-score). The mood phrase comes from how far the mood re-rank moved the title.
+    """
+    import numpy as np
+    from app.ml.embeddings import unit
+
+    contrib = {k: float(weights.get(k, 0.0) * comps[k][row]) for k in ('content', 'cf', 'quality', 'pop')}
+    reason = max(contrib, key=contrib.get)
+    m = store.E[row]
+    taste_match = float(m @ unit(taste))
+
+    nearest = None
+    if liked_rows:
+        sims = store.E[liked_rows] @ m
+        j = int(np.argmax(sims))
+        nearest = {'movie_id': int(store.ids[liked_rows[j]]), 'title': titles.get(int(store.ids[liked_rows[j]])),
+                   'similarity': round(float(sims[j]), 3)}
+    near_t = nearest['title'] if nearest and nearest['title'] else None
+
+    if not liked_rows:
+        text = 'Well rated and popular with viewers' if reason in ('quality', 'pop', 'cf') else 'Matches your starting genres'
+    elif reason == 'cf':
+        text = f'Liked by people who also liked {near_t}' if near_t else 'Liked by people with similar taste'
+    elif reason == 'content':
+        text = f'Close to {near_t}, which you liked' if near_t else 'Close to what you like'
+    elif reason == 'quality':
+        text = f'Highly rated ({movie.vote_average:.1f}/10)' if movie.vote_average else 'Highly rated'
+    else:
+        text = 'Popular with viewers who share your taste'
+
+    moved = None
+    if mood and lam > 0 and base_rank and final_rank:
+        moved = int(base_rank - final_rank)
+        if moved > 0:
+            text += f' · {mood} mood lifted it {moved} place{"s" if moved != 1 else ""}'
+    mood_fit = float(m @ store.mood_vectors[mood]) if mood else None
+    return {
+        'reason': reason,
+        'components': {k: round(v, 3) for k, v in contrib.items()},
+        'taste_match': round(taste_match, 3),
+        'mood_fit': round(mood_fit, 3) if mood_fit is not None else None,
+        'nearest_liked': nearest,
+        'rank_without_mood': base_rank, 'rank_with_mood': final_rank, 'places_moved_by_mood': moved,
+        'text': text,
+    }

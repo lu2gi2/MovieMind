@@ -1,66 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Pick a film by where you are{% endblock %}
+{% block title %}Find your next favorite story{% endblock %}
+{% block bgmode %}strong{% endblock %}
 
-{% block content %}
-<div class="wrap hero">
-    <div>
-        <p class="eyebrow">Mood-aware film picks</p>
-        <h1>Your taste is a place. <em>Your mood</em> is a direction.</h1>
-        <p class="lede">MovieMind maps every film by what it feels like, finds where your taste sits, then walks you toward tonight’s mood by exactly as far as you ask.</p>
-        <div class="hero-cta">
-            <a class="btn btn--accent" href="/signup">Find my spot {% raw %}<svg class="i" aria-hidden="true"><use href="#i-arrow"/></svg>{% endraw %}</a>
-            <a class="btn btn--ghost" href="/login">I have an account</a>
-        </div>
+{% block pub %}
+<div class="land">
+    <h1>Find your next <span class="serif">favorite story.</span></h1>
+    <p class="lede">MovieMind suggests movies that match your taste and your mood, and tells you why. It recommends; it doesn’t stream.</p>
+    <div class="cta"><a class="btn" href="/signup">Get started</a><a class="btn btn--ghost" href="/login">I have an account</a></div>
+    <div class="trio">
+        <div class="panel"><h3>It learns your taste</h3><p>Like a few movies and MovieMind finds where your taste sits among thousands of films.</p></div>
+        <div class="panel"><h3>You set the mood</h3><p>Pick a feeling and choose how strongly it should shape your picks, from a whisper to a full change of scene.</p></div>
+        <div class="panel"><h3>Every pick explains itself</h3><p>See which film you liked it is closest to, and what the mood changed.</p></div>
     </div>
-    <svg class="vibe" id="hero-vibe" role="img" aria-label="Diagram: a taste point moves along an arrow toward a mood region on a map of films"></svg>
 </div>
-
-<section class="band">
-    <div class="wrap eq">
-        <div>
-            <p class="eyebrow">How it decides</p>
-            <h2 style="margin:16px 0">One line of maths, <em>no black box.</em></h2>
-            <p class="lede">Every film, every viewer and every mood lives in the same space, so a recommendation is just “start here, lean this way, see what’s closest”. That’s why each suggestion can tell you exactly why it’s there.</p>
-        </div>
-        <div>
-            <p class="eq-line">search&nbsp;=&nbsp;<span class="t">taste</span>&nbsp;+ <span class="l">λ</span>&nbsp;×&nbsp;<span class="m">mood</span></p>
-            <div class="facts">
-                <div><b>4,988</b><span>films mapped</span></div>
-                <div><b>384</b><span>dimensions</span></div>
-                <div><b>10</b><span>moods</span></div>
-            </div>
-        </div>
-    </div>
-</section>
-
-<section class="section">
-    <div class="wrap">
-        <div class="section-head"><h2>Four moves, <em>no quiz.</em></h2></div>
-        <ol class="steps-list">
-            <li><span class="n">01</span><h3>Like a few films</h3><p>Each one pins down your spot on the map. Unlike one and the spot is recomputed from what’s left, so mistakes don’t stick.</p></li>
-            <li><span class="n">02</span><h3>Pick a feeling</h3><p>Ten moods, each a direction learned from the films themselves: tense, tender, wistful, wide-eyed, and so on.</p></li>
-            <li><span class="n">03</span><h3>Choose how far to go</h3><p>A single ruler. Slide to “taste” and you get more of what you love; slide to “mood” and you get a change of scene.</p></li>
-            <li><span class="n">04</span><h3>See why</h3><p>Every pick shows its taste match, what the mood added, and which film you liked it sits closest to.</p></li>
-        </ol>
-    </div>
-</section>
-
-<section class="close-cta">
-    <div class="wrap">
-        <h2>Tonight’s film is <em>probably</em> two likes away.</h2>
-        <a class="btn" href="/signup">Start with three films</a>
-    </div>
-</section>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-(function () {
-    const svg = document.getElementById('hero-vibe');
-    drawVibe(svg, { lam: 0.3, mood: 'excited' });
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    let t = 0;
-    setInterval(() => { t += 0.02; drawVibe(svg, { lam: 0.5 + 0.45 * Math.sin(t), mood: 'excited' }); }, 60);
-})();
-</script>
 {% endblock %}

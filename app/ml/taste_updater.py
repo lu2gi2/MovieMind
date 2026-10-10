@@ -7,7 +7,7 @@ based on their likes, views, and ratings.
 import json
 from datetime import datetime, timedelta
 from app import db
-from app.models import User, Movie, UserFavorite, UserInteraction
+from app.models import User, Movie, UserFavorite, UserInteraction, UserLike
 
 
 class TasteUpdater:
@@ -280,7 +280,7 @@ def refresh_embedding_taste(user_id, store=None):
     """
     v2 taste: unit centroid of the embeddings of every movie the user currently likes.
 
-    Always recomputed from the favourites table, so an unlike never has to "subtract"
+    Always recomputed from the likes table, so an unlike never has to "subtract"
     a vector. A user with no likes gets the global mean embedding (cold start).
     Returns the centroid as a NumPy array, or None if embeddings are not built.
     """
@@ -289,7 +289,7 @@ def refresh_embedding_taste(user_id, store=None):
     user = User.query.get(user_id)
     if store is None or user is None:
         return None
-    liked = [f.movie_id for f in UserFavorite.query.filter_by(user_id=user_id).all()]
+    liked = [l.movie_id for l in UserLike.query.filter_by(user_id=user_id).all()]
     taste = store.centroid(liked)
     user.set_taste_embedding(taste)
     db.session.commit()

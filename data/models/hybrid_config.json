@@ -1,0 +1,13 @@
+{
+ "weights": {
+  "content": 0.195,
+  "cf": 0.46,
+  "quality": 0.025,
+  "pop": 0.32
+ },
+ "cf_gamma": 0.5,
+ "candidates": 60,
+ "default_lambda": 0.3,
+ "tuned_on": "mean of normalised weights tuned on the validation users of 5 random user splits (NDCG@10); gamma = median of the per-split choices",
+ "stats_built_from": "75303 MovieLens ratings, 610 users"
+}

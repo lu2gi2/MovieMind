@@ -1,114 +1,211 @@
 {% extends "base.html" %}
-{% block title %}Tonight{% endblock %}
+{% block title %}Home{% endblock %}
+{% block bgmode %}soft{% endblock %}
+{% block pageclass %}page--wide{% endblock %}
 
 {% block content %}
-<div class="wrap dash">
-    <aside class="panel" aria-label="Mood controls">
-        <div>
-            <p class="eyebrow">Tonight</p>
-            <h1 style="margin-top:12px">Hello, <em id="user-name">you</em>.</h1>
-            <p class="lede" style="margin-top:12px">Pick a feeling, then decide how far to walk toward it.</p>
-        </div>
-
-        <fieldset class="moods">
-            <legend class="eyebrow">Feeling</legend>
-            <ul class="mood-list" id="mood-list"><li class="muted" style="padding:12px 0">Loading moods…</li></ul>
-        </fieldset>
-
-        <fieldset class="ruler">
-            <legend class="eyebrow">How far</legend>
-            <div class="ruler-ends"><span class="t">◂ Taste</span><span class="m">Mood ▸</span></div>
-            <input class="range" id="lambda" type="range" min="0" max="1" step="0.05" value="0.3" aria-label="Mood strength lambda" disabled>
-            <div class="readout"><span class="val" id="lam-val">0.30</span><span class="txt" id="lam-txt">Pick a feeling to use the ruler</span></div>
-        </fieldset>
-
-        <svg class="vibe" id="vibe" role="img" aria-label="Map showing your taste point moving toward the selected mood"></svg>
-    </aside>
-
-    <section aria-live="polite">
-        <div class="results-head">
-            <div>
-                <p class="eyebrow" id="results-meta">&nbsp;</p>
-                <h2 id="results-title" style="margin-top:12px">Straight from <em>your taste</em></h2>
+<div class="home">
+  <div class="home-main">
+    <!-- featured recommendation -->
+    <section class="hero" id="hero" aria-label="Featured for you" hidden>
+        <div class="hero-img" id="hero-img" aria-hidden="true"></div>
+        <div class="hero-body">
+            <p class="hero-kicker" id="hero-kicker"></p>
+            <h1 class="hero-title" id="hero-title"></h1>
+            <p class="hero-text" id="hero-text"></p>
+            <div class="hero-actions">
+                <a class="btn" id="hero-details" href="#">View details</a>
+                <button class="btn btn--ghost" id="hero-watch" type="button" data-act="watch" data-static data-id="0" aria-pressed="false">Add to Watchlist</button>
             </div>
-            <button class="btn btn--ghost btn--sm" id="rerun" hidden>{% raw %}<svg class="i" aria-hidden="true"><use href="#i-redo"/></svg>{% endraw %} Re-run</button>
         </div>
-        <div class="stale" id="stale" hidden><span>Your list changed, so your spot on the map moved.</span><button class="btn btn--sm" id="stale-btn">Refresh picks</button></div>
-        <div class="cards cards--recs" id="grid"></div>
-        <div style="text-align:center;margin-top:48px"><button class="btn btn--ghost" id="more" hidden>Show more</button></div>
+        <div class="hero-nav">
+            <div class="dots" id="hero-dots" role="tablist" aria-label="Featured titles"></div>
+            <button type="button" id="hero-prev" aria-label="Previous featured title">‹</button>
+            <button type="button" id="hero-next" aria-label="Next featured title">›</button>
+        </div>
     </section>
+    <div class="hero hero--skel skel" id="hero-skel" aria-hidden="true"></div>
+
+    <div class="banner" id="newuser" hidden>
+        <div><h3>MovieMind learns from what you like</h3><p class="muted small">Like a few titles and your picks will start to reflect your taste. Until then, you’re seeing films matched to your starting genres.</p></div>
+    </div>
+    <div class="note" id="stale" hidden role="status" style="margin-top:var(--s4)">Your taste just changed. <button class="link" id="stale-btn">Refresh picks</button></div>
+
+    <section class="section" aria-labelledby="recs-h">
+        <div class="section-head"><div><h2 id="recs-h">Recommendations for you</h2><p id="recs-sub" aria-live="polite"></p></div><button class="link small" id="recs-all" type="button" aria-expanded="false">See all</button></div>
+        <div class="grid grid--row" id="recs" aria-busy="true"></div>
+    </section>
+
+    <section class="section" id="moods-sec" aria-labelledby="mood-h">
+        <div class="section-head"><div><h2 id="mood-h">Browse by mood</h2><p>Pick a feeling to reshape your recommendations.</p></div><button class="link small" id="mood-clear" hidden>Clear mood</button></div>
+        <div class="chips" id="moods" role="group" aria-label="Mood"><span class="muted small">Loading moods…</span></div>
+        <div class="ruler" id="ruler" aria-disabled="true">
+            <span class="ends">Your taste</span>
+            <input class="range" id="lambda" type="range" min="0" max="1" step="0.05" value="0.3" disabled aria-label="How strongly the mood shapes your picks">
+            <span><span class="val" id="lam-val">0.30</span> <span class="ends" id="lam-txt">Choose a mood to adjust</span></span>
+        </div>
+    </section>
+
+    <section class="section" aria-labelledby="pop-h">
+        <div class="section-head"><div><h2 id="pop-h">Popular movies</h2><p>Most popular in the catalogue right now.</p></div><a class="small" href="/browse">See all</a></div>
+        <div class="grid grid--row" id="pop"></div>
+    </section>
+
+    <section class="section" id="sec-genre" aria-labelledby="genre-h" hidden>
+        <div class="section-head"><div><h2 id="genre-h"></h2><p>Top-rated in a genre your likes lean toward.</p></div></div>
+        <div class="grid grid--row" id="genre-row"></div>
+    </section>
+
+    <section class="section" id="sec-sim" aria-labelledby="sim-h" hidden>
+        <div class="section-head"><div><h2 id="sim-h"></h2><p>Nearest to it in the embedding space.</p></div></div>
+        <div class="grid grid--row" id="sim-row"></div>
+    </section>
+  </div>
+
+  <aside class="rail" aria-label="Your taste and watchlist">
+    <section class="panel" aria-labelledby="taste-h">
+        <div class="panel-head"><h2 id="taste-h">My Taste</h2><a class="small" href="/taste">See details →</a></div>
+        <div id="taste-box"><div class="skel" style="height:140px"></div></div>
+    </section>
+    <section class="panel" aria-labelledby="wl-h">
+        <div class="panel-head"><h2 id="wl-h">Your Watchlist</h2><a class="small" href="/watchlist">See all →</a></div>
+        <div id="wl-box"><div class="skel" style="height:120px"></div></div>
+    </section>
+  </aside>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-const $ = id => document.getElementById(id);
-const state = { mood: null, label: null, lam: 0.3, limit: 12, seq: 0, timer: null };
-const fmt = v => (+v).toFixed(2);
+const MOOD_DESC = { happy: 'Warm and funny', sad: 'Quiet and moving', excited: 'Fast and high-stakes', relaxed: 'Gentle, low pressure', romantic: 'Love stories', thrilled: 'Tense and clever', nostalgic: 'Growing up, other decades', adventurous: 'Journeys and far places', thoughtful: 'Ideas that stay with you', scared: 'Ghosts and dread' };
+const st = { mood: null, label: '', lam: 0.3, seq: 0, timer: null, all: false, feat: [], idx: 0 };
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
+/* ---------- mood + ruler ---------- */
+function lamWords() {
+    if (!st.mood) return 'Choose a mood to adjust';
+    const v = st.lam, m = st.label.toLowerCase();
+    if (v === 0) return 'Mood ignored';
+    if (v <= 0.15) return `A whisper of ${m}`;
+    if (v <= 0.4) return `A gentle nudge toward ${m}`;
+    if (v <= 0.7) return `A stronger pull toward ${m}`;
+    return `Mostly ${m}`;
+}
 function paintRuler() {
-    $('lam-val').textContent = fmt(state.lam);
-    $('lam-txt').textContent = state.mood ? lambdaWords(state.lam, state.label.toLowerCase()) : 'Pick a feeling to use the ruler';
-    $('lambda').disabled = !state.mood;
-    drawVibe($('vibe'), { lam: state.lam, mood: state.mood ? state.label.toLowerCase() : null });
+    $('lambda').disabled = !st.mood;
+    $('ruler').setAttribute('aria-disabled', String(!st.mood));
+    $('lam-val').textContent = st.lam.toFixed(2);
+    $('lam-txt').textContent = lamWords();
+    $('lambda').setAttribute('aria-valuetext', `${st.lam.toFixed(2)}, ${lamWords()}`);
+    $('mood-clear').hidden = !st.mood;
 }
 
-function skeleton(n = 6) {
-    $('grid').innerHTML = Array.from({ length: n }, () => `<div><div class="skel skel--poster"></div><div class="skel skel--line"></div><div class="skel skel--line" style="width:40%"></div></div>`).join('');
+/* ---------- hero carousel (top recommendations) ---------- */
+function reasonFor(m) {
+    const d = m.explanation_detail || {};
+    if (st.mood) return `Matched to your ${st.label.toLowerCase()} mood`;
+    if (d.nearest_liked && d.nearest_liked.title) return `Because you like ${d.nearest_liked.title}`;
+    const g = (m.genres || []).slice(0, 2);
+    return g.length ? `Picked from ${g.join(' and ')}` : 'Picked for you';
+}
+function paintHero() {
+    const m = st.feat[st.idx]; if (!m) { $('hero').hidden = true; return; }
+    $('hero').hidden = false; $('hero-skel').hidden = true;
+    $('hero-img').style.backgroundImage = m.backdrop_url ? `url("${m.backdrop_url}")` : '';
+    $('hero-kicker').textContent = reasonFor(m);
+    $('hero-title').textContent = m.title;
+    $('hero-text').textContent = m.overview || '';
+    $('hero-details').href = `/movie/${m.movie_id}`;
+    const w = $('hero-watch'); w.dataset.id = m.movie_id; w.setAttribute('aria-pressed', Store.has('watch', m.movie_id));
+    w.textContent = Store.has('watch', m.movie_id) ? 'On your Watchlist' : 'Add to Watchlist';
+    $('hero-dots').innerHTML = st.feat.map((_, i) => `<button role="tab" aria-selected="${i === st.idx}" aria-label="Featured title ${i + 1}" data-i="${i}"></button>`).join('');
+    rememberWhy(m);
 }
 
-async function run() {
-    const seq = ++state.seq;
+/* ---------- recommendations ---------- */
+async function loadRecs() {
+    const seq = ++st.seq;
+    $('recs').setAttribute('aria-busy', 'true'); $('recs').innerHTML = skeleton(7);
+    const q = new URLSearchParams({ limit: 24, lambda: st.lam });
+    if (st.mood) q.set('mood', st.mood);
+    const { ok, data } = await get('/api/recommend?' + q);
+    if (seq !== st.seq) return;
+    $('recs').removeAttribute('aria-busy');
+    if (!ok) { $('recs').innerHTML = errorHTML(data.error || 'We couldn’t load recommendations.', 'loadRecs()'); $('hero-skel').hidden = true; return; }
+    const recs = data.recommendations || [];
+    $('recs-sub').textContent = st.mood ? `Shaped by your taste, nudged toward ${st.label.toLowerCase()}.` : 'Based on the titles you like.';
+    $('recs').innerHTML = recs.length ? gridHTML(recs, { why: true }) : emptyHTML('Nothing to suggest yet', 'Like a few titles from Movies and we’ll start matching them.', { href: '/browse', label: 'Browse movies' });
+    st.feat = recs.filter((r) => r.backdrop_url).slice(0, 5); if (!st.feat.length) st.feat = recs.slice(0, 5);
+    st.idx = 0; paintHero(); $('hero-skel').hidden = true;
     $('stale').hidden = true;
-    skeleton();
-    $('results-title').innerHTML = state.mood ? `Leaning <em>${esc(state.label.toLowerCase())}</em>, from your spot` : 'Straight from <em>your taste</em>';
-    $('results-meta').innerHTML = state.mood ? `Walking toward ${esc(state.label.toLowerCase())}…` : 'Reading your map…';
-    const q = new URLSearchParams({ limit: state.limit, lambda: state.lam });
-    if (state.mood) q.set('mood', state.mood);
-    let res;
-    try { res = await json('/api/recommend?' + q); } catch (e) { res = { ok: false, data: {} }; }
-    if (seq !== state.seq) return;                       // a newer request superseded this one
-    if (!res.ok) {
-        $('grid').innerHTML = `<div class="empty" style="grid-column:1/-1"><h3>That didn’t load.</h3><p>${esc(res.data.error || 'The recommender is out for a walk.')}</p><button class="btn" onclick="run()">Try again</button></div>`;
-        $('results-meta').textContent = '—'; return;
-    }
-    const recs = res.data.recommendations || [];
-    $('results-meta').textContent = `${recs.length} picks · λ ${fmt(state.mood ? state.lam : 0)} · ${res.data.engine || ''}`;
-    if (!recs.length) {
-        $('grid').innerHTML = `<div class="empty" style="grid-column:1/-1"><h3>Nothing close enough yet.</h3><p>Like a few films from Browse and your spot on the map will start to mean something.</p><a class="btn" href="/browse">Browse films</a></div>`;
-        $('more').hidden = true; return;
-    }
-    $('grid').innerHTML = recs.map((m, i) => cardHTML(m, { rec: true, i })).join('');
-    $('more').hidden = state.limit >= 36 || recs.length < state.limit;
-    $('rerun').hidden = false;
 }
-const later = () => { clearTimeout(state.timer); state.timer = setTimeout(run, 220); };
+
+/* ---------- right rail ---------- */
+async function loadTaste() {
+    const { ok, data } = await get('/api/user/taste');
+    const box = $('taste-box');
+    if (!ok) { box.innerHTML = '<p class="muted small">We couldn’t load your taste right now.</p>'; return; }
+    if (!data.like_count) { box.innerHTML = '<p class="muted small" style="margin-bottom:12px">Like a few movies and your taste summary will appear here.</p><a class="btn btn--sm" href="/browse">Explore movies</a>'; return; }
+    const top = (data.genre_share || []).slice(0, 5);
+    const lean = top.slice(0, 2).map((g) => g.genre).join(' and ');
+    box.innerHTML = `<p class="muted small" style="margin-bottom:14px">Your top genres, from the ${data.like_count} title${data.like_count === 1 ? '' : 's'} you liked${lean ? ` — mostly ${esc(lean)}` : ''}.</p>
+        <div class="bars">${top.map((g) => `<div class="bar"><span>${esc(g.genre)}</span><div class="track" role="img" aria-label="${esc(g.genre)}: ${Math.round(g.share * 100)}% of your likes"><i style="width:${Math.round(g.share * 100)}%"></i></div><span class="num">${Math.round(g.share * 100)}%</span></div>`).join('')}</div>
+        ${(data.mood_fit || []).length ? `<p class="eyebrow" style="margin:18px 0 8px">Moods that suit your taste</p><div class="chips">${data.mood_fit.map((m) => `<span class="chip is-on">${esc(cap(m.mood))}</span>`).join('')}</div>` : ''}`;
+}
+async function loadWatchlist() {
+    const { ok, data } = await get('/api/user/watchlist?per_page=3');
+    const box = $('wl-box');
+    if (!ok) { box.innerHTML = '<p class="muted small">We couldn’t load your watchlist.</p>'; return; }
+    const items = data.watchlist || [];
+    if (!items.length) { box.innerHTML = '<p class="muted small" style="margin-bottom:12px">Nothing saved yet. Tap the bookmark on a title to keep it for later.</p><a class="btn btn--ghost btn--sm" href="/browse">Find something to save</a>'; return; }
+    box.innerHTML = `<ul class="wl">${items.map((m) => `<li><a class="wl-poster" href="/movie/${m.movie_id}" tabindex="-1" aria-hidden="true">${posterHTML(m)}</a>
+        <div><a class="card-title" href="/movie/${m.movie_id}">${esc(m.title)}</a><span class="card-meta">${esc(metaLine(m))}</span></div>${actButton('watch', m.movie_id)}</li>`).join('')}</ul>
+        ${data.total > 3 ? `<p class="muted small" style="margin-top:8px">+ ${data.total - 3} more</p>` : ''}`;
+}
+async function loadRows() {
+    const pop = await get('/api/movies?sort=popularity&per_page=12');
+    $('pop').innerHTML = gridHTML(pop.data.movies || []);
+    const t = await get('/api/user/taste');
+    const top = ((t.data.genre_share || [])[0] || {}).genre;
+    if (top) {
+        const g = await get(`/api/movies?genre=${encodeURIComponent(top)}&sort=rating&per_page=14`);
+        const list = (g.data.movies || []).filter((m) => !Store.likes.has(m.movie_id) && !Store.favorites.has(m.movie_id)).slice(0, 10);
+        if (list.length) { $('genre-h').textContent = `Because you like ${top}`; $('genre-row').innerHTML = gridHTML(list); $('sec-genre').hidden = false; }
+    }
+    if (Store.likes.size) {
+        const l = await get('/api/user/likes?per_page=1'); const last = (l.data.likes || [])[0];
+        if (last) {
+            const s = await get(`/api/similar/${last.movie_id}?limit=12`);
+            const sim = (s.data.similar_movies || []).filter((m) => !Store.likes.has(m.movie_id)).slice(0, 10);
+            if (sim.length) { $('sim-h').textContent = `Similar to ${last.title}`; $('sim-row').innerHTML = gridHTML(sim); $('sec-sim').hidden = false; }
+        }
+    }
+}
 
 (async () => {
-    const auth = await checkAuth();
-    if (!auth.authenticated) { location.href = '/login'; return; }
-    $('user-name').textContent = auth.user.username;
-    await loadFavIds();
-    bindCards($('grid'));
-
-    const { data } = await json('/api/moods');
-    const moods = data.moods || [];
-    $('mood-list').innerHTML = [{ id: '', label: 'Just my taste', description: 'No mood. Pure you' }, ...moods].map((m, i) =>
-        `<li><button class="mood" data-mood="${esc(m.id)}" data-label="${esc(m.label)}" aria-pressed="${!m.id}">
-            <span class="n">${String(i).padStart(2, '0')}</span><span class="nm">${esc(m.label)}</span><span class="ds">${esc(m.description)}</span></button></li>`).join('');
-    $('mood-list').addEventListener('click', e => {
-        const b = e.target.closest('.mood'); if (!b) return;
-        document.querySelectorAll('.mood').forEach(x => x.setAttribute('aria-pressed', x === b));
-        state.mood = b.dataset.mood || null; state.label = b.dataset.label; state.limit = 12;
-        if (state.mood && state.lam === 0) { state.lam = 0.3; $('lambda').value = 0.3; }
-        paintRuler(); run();
+    await Store.load();
+    $('newuser').hidden = Store.likes.size > 0;
+    const { data } = await get('/api/moods');
+    $('moods').innerHTML = (data.moods || []).map((m) => `<button class="chip" data-mood="${esc(m.id)}" data-label="${esc(m.label)}" aria-pressed="false" title="${esc(MOOD_DESC[m.id] || '')}">${icon('x', '').replace('#i-x', '#m-' + m.id)}${esc(m.label)}</button>`).join('');
+    $('moods').addEventListener('click', (e) => {
+        const b = e.target.closest('.chip'); if (!b) return;
+        const on = b.getAttribute('aria-pressed') === 'true';
+        document.querySelectorAll('#moods .chip').forEach((x) => x.setAttribute('aria-pressed', 'false'));
+        if (on) { st.mood = null; } else { b.setAttribute('aria-pressed', 'true'); st.mood = b.dataset.mood; st.label = b.dataset.label; if (st.lam === 0) { st.lam = 0.3; $('lambda').value = 0.3; } }
+        paintRuler(); loadRecs();
     });
-    $('lambda').addEventListener('input', e => { state.lam = +e.target.value; paintRuler(); later(); });
-    $('more').addEventListener('click', () => { state.limit += 6; run(); });
-    $('rerun').addEventListener('click', run);
-    $('stale-btn').addEventListener('click', run);
-    document.addEventListener('taste:changed', () => { $('stale').hidden = false; });
-    paintRuler(); run();
+    $('mood-clear').addEventListener('click', () => { document.querySelectorAll('#moods .chip').forEach((x) => x.setAttribute('aria-pressed', 'false')); st.mood = null; paintRuler(); loadRecs(); });
+    $('lambda').addEventListener('input', (e) => { st.lam = +e.target.value; paintRuler(); clearTimeout(st.timer); st.timer = setTimeout(loadRecs, 250); });
+    $('stale-btn').addEventListener('click', () => { loadRecs(); loadTaste(); loadRows(); });
+    $('recs-all').addEventListener('click', function () { st.all = !st.all; $('recs').classList.toggle('grid--row', !st.all); this.textContent = st.all ? 'Show less' : 'See all'; this.setAttribute('aria-expanded', String(st.all)); });
+    $('hero-prev').addEventListener('click', () => { st.idx = (st.idx + st.feat.length - 1) % st.feat.length; paintHero(); });
+    $('hero-next').addEventListener('click', () => { st.idx = (st.idx + 1) % st.feat.length; paintHero(); });
+    $('hero-dots').addEventListener('click', (e) => { const b = e.target.closest('[data-i]'); if (b) { st.idx = +b.dataset.i; paintHero(); } });
+    Store.on((d) => {
+        if (d.changedTaste) { $('stale').hidden = false; $('newuser').hidden = Store.likes.size > 0; loadTaste(); }
+        if (d.done && d.kind === 'watch') { loadWatchlist(); paintHero(); }
+    });
+    paintRuler(); loadRecs(); loadTaste(); loadWatchlist(); loadRows();
 })();
 </script>
 {% endblock %}

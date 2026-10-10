@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}My Taste{% endblock %}
+{% block bgmode %}faint{% endblock %}
+
+{% block content %}
+<div class="page-head"><div><h1>My Taste</h1><p>MovieMind learns from the titles you like. This is what it has understood so far.</p></div></div>
+<div id="view" aria-busy="true"><div class="panel"><div class="skel" style="height:90px"></div></div></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const list = (a) => a.length <= 1 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+(async () => {
+    await Store.load();
+    const [t, p] = await Promise.all([get('/api/user/taste'), get('/api/user/profile')]);
+    $('view').removeAttribute('aria-busy');
+    if (!t.ok) { $('view').innerHTML = errorHTML(t.data.error || 'We couldn’t load your taste profile.'); return; }
+    const likes = t.data.like_count || 0;
+    if (!likes) {
+        $('view').innerHTML = `<div class="panel">${emptyHTML('Your taste profile is just getting started', 'Like a few movies and MovieMind will show you what it learns: the genres you lean toward and the films that sit closest to your taste.', { href: '/browse', label: 'Explore movies' })}</div>
+            <div class="panel"><h2 style="margin-bottom:12px">How it learns</h2><ol class="steps"><li>Like a title: it becomes a signal about what you enjoy.</li><li>MovieMind averages the signals into a single point that stands for your taste.</li><li>Recommendations are the films closest to that point, optionally nudged by a mood.</li></ol><p class="muted small" style="margin-top:12px">Favorites and your Watchlist are for organising. They don’t change your taste.</p></div>`;
+        return;
+    }
+    const genres = Object.entries(t.data.taste_vector || {}).sort((a, b) => b[1] - a[1]);
+    const lean = genres.filter(([, v]) => v > 0.5).map(([g]) => g);
+    const near = (t.data.taste_neighbours || []).map((n) => n.title);
+    const parts = [];
+    if (lean.length) parts.push(`You lean toward <strong>${esc(list(lean.slice(0, 3)))}</strong>.`);
+    if (near.length) parts.push(`Your taste currently sits closest to <strong>${esc(list(near.slice(0, 3)))}</strong>.`);
+    parts.push(`It’s based on ${likes} title${likes === 1 ? '' : 's'} you liked, and sharpens with every one.`);
+    const recent = t.data.recent_likes || [];
+    $('view').innerHTML = `
+        <section class="panel" aria-labelledby="sum-h"><h2 id="sum-h" class="eyebrow" style="margin-bottom:12px">In short</h2><p class="summary">${parts.join(' ')}</p></section>
+        <div class="two" style="margin-top:var(--s5)">
+            <section class="panel" aria-labelledby="gl-h"><div class="panel-head"><h2 id="gl-h">Genre lean</h2></div>
+                <div class="bars">${genres.slice(0, 8).map(([g, v]) => `<div class="bar"><span>${esc(g)}</span><div class="track" role="img" aria-label="${esc(g)} score ${v.toFixed(2)}"><i style="width:${Math.round(v * 100)}%"></i></div><span class="num">${v.toFixed(2)}</span></div>`).join('') || '<p class="muted">No genre data yet.</p>'}</div>
+                <p class="muted small" style="margin-top:12px">Scores run from 0 to 1; 0.50 is neutral and higher means you’ve liked more of it.</p></section>
+            <section class="panel" aria-labelledby="nn-h"><div class="panel-head"><h2 id="nn-h">Closest to your taste</h2></div>
+                ${near.length ? `<ul class="list">${t.data.taste_neighbours.map((n) => `<li><a href="/movie/${n.movie_id}">${esc(n.title)}</a><span class="muted small">${n.release_year || ''} · similarity ${n.similarity.toFixed(2)}</span></li>`).join('')}</ul>` : '<p class="muted">Not enough data yet.</p>'}
+                <p class="muted small" style="margin-top:12px">Unseen films nearest to the centre of everything you’ve liked.</p></section>
+        </div>
+        ${recent.length ? `<section class="section" aria-labelledby="rl-h"><div class="section-head"><h2 id="rl-h">Recently liked</h2></div><div class="grid grid--row">${gridHTML(recent)}</div></section>` : ''}
+        <section class="panel" style="margin-top:var(--s5)" aria-labelledby="how-h"><h2 id="how-h" style="margin-bottom:12px">How your actions shape recommendations</h2>
+            <ol class="steps"><li><strong>Like</strong> teaches MovieMind. Each like moves your taste point.</li><li><strong>Favorites</strong> and <strong>Watchlist</strong> keep titles for you; they don’t change your taste.</li><li>Picking a <strong>mood</strong> nudges your taste point for one session; it never overwrites it.</li></ol></section>`;
+})();
+</script>
+{% endblock %}

@@ -1,211 +1,203 @@
-/* MovieMind — shared behaviour: auth nav, cards, detail dialog, favourites, toasts, vibe map */
+/* MovieMind — Sky Light. Shared behaviour:
+   API helpers, one state store (Like / Favorite / Watchlist), reusable card, toasts,
+   empty/error/skeleton states, header search, and the scroll-driven botanical background. */
 
-const MM = { favs: new Set(), recs: {}, authed: false };
+/* ---------- helpers ---------- */
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const icon = (name, cls = '') => `<svg class="i ${cls}" aria-hidden="true" focusable="false"><use href="#i-${name}"/></svg>`;
 
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const icon = (name, cls = '') => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
-const json = (url, opts) => fetch(url, opts).then(async r => ({ ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) }));
-const post = (url, body) => json(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
-
-/* ---------- auth + nav ---------- */
-async function checkAuth() {
-    try {
-        const { data } = await json('/api/auth/check');
-        MM.authed = !!data.authenticated;
-        document.querySelectorAll('[data-auth="in"]').forEach(el => el.hidden = !MM.authed);
-        document.querySelectorAll('[data-auth="out"]').forEach(el => el.hidden = MM.authed);
-        if (MM.authed && data.user) {
-            document.querySelectorAll('[data-username]').forEach(el => el.textContent = data.user.username);
-        }
-        return data;
-    } catch (e) { return { authenticated: false }; }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    const here = location.pathname;
-    document.querySelectorAll('.nav a').forEach(a => { if (a.getAttribute('href') === here) a.setAttribute('aria-current', 'page'); });
-
-    const menuBtn = document.getElementById('menu-btn');
-    if (menuBtn) menuBtn.addEventListener('click', () => {
-        const open = document.querySelector('.nav').classList.toggle('open');
-        menuBtn.setAttribute('aria-expanded', open);
-    });
-
-    const who = document.getElementById('who-btn'), menu = document.getElementById('who-menu');
-    if (who) {
-        who.addEventListener('click', e => { e.stopPropagation(); menu.hidden = !menu.hidden; who.setAttribute('aria-expanded', !menu.hidden); });
-        document.addEventListener('click', () => { menu.hidden = true; who.setAttribute('aria-expanded', false); });
-        document.addEventListener('keydown', e => { if (e.key === 'Escape') menu.hidden = true; });
+async function api(url, opts = {}) {
+    const init = { credentials: 'same-origin', ...opts };
+    if (opts.body && typeof opts.body !== 'string') {
+        init.headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+        init.body = JSON.stringify(opts.body);
     }
-
-    const out = document.getElementById('logout-btn');
-    if (out) out.addEventListener('click', async e => { e.preventDefault(); await post('/api/auth/logout'); location.href = '/'; });
-
-    checkAuth();
-});
+    let res;
+    try { res = await fetch(url, init); } catch (e) { return { ok: false, status: 0, data: { error: 'Network error' } }; }
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401 && !location.pathname.match(/^\/(login|signup)?$/)) { location.href = '/login'; }
+    return { ok: res.ok, status: res.status, data };
+}
+const get = (url) => api(url);
 
 /* ---------- toasts ---------- */
-function toast(html, ms = 4200) {
-    const box = document.getElementById('toasts');
-    if (!box) return;
+function toast(msg, kind = '') {
+    const box = $('toasts'); if (!box) return;
     const t = document.createElement('div');
-    t.className = 'toast'; t.setAttribute('role', 'status'); t.innerHTML = html;
+    t.className = 'toast ' + (kind === 'error' ? 'is-error' : '');
+    t.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+    t.textContent = msg;
     box.appendChild(t);
-    setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, ms);
+    setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 260); }, kind === 'error' ? 5000 : 3200);
 }
 
-/* ---------- favourites ---------- */
-async function loadFavIds() {
-    const { ok, data } = await json('/api/user/favorites');
-    if (ok && data.favorites) MM.favs = new Set(data.favorites.map(m => m.movie_id));
-    return MM.favs;
-}
+/* ---------- one source of truth for interaction state ---------- */
+const KINDS = {
+    like: { set: 'likes', url: '/api/user/likes', on: 'Remove like', off: 'Like', label: 'Like' },
+    fav: { set: 'favorites', url: '/api/user/favorites', on: 'Remove from Favorites', off: 'Add to Favorites', label: 'Favorite' },
+    watch: { set: 'watchlist', url: '/api/user/watchlist', on: 'Remove from Watchlist', off: 'Add to Watchlist', label: 'Watchlist' },
+};
+const ICON = { like: 'heart', fav: 'star', watch: 'bookmark' };
 
-async function toggleFav(id, btn) {
-    const was = MM.favs.has(id);
-    if (btn) btn.disabled = true;
-    try {
-        let res;
-        if (was) res = await json(`/api/user/favorites/${id}`, { method: 'DELETE' });
-        else res = await post('/api/user/favorites', { movie_id: id });
-        if (!res.ok && res.status !== 409) { toast('Couldn’t save that one. Try again in a second.'); return was; }
-        if (was) { MM.favs.delete(id); toast('Dropped from your list. Your taste has shifted back.'); }
-        else {
-            MM.favs.add(id);
-            const msg = res.data.taste_message ? esc(res.data.taste_message) : 'Added to your list.';
-            toast(`<b>Noted.</b> ${msg}`);
+const Store = {
+    likes: new Set(), favorites: new Set(), watchlist: new Set(),
+    loaded: false, pending: new Set(), listeners: [],
+    on(fn) { this.listeners.push(fn); },
+    emit(detail = {}) { this.listeners.forEach((fn) => fn(detail)); syncControls(); },
+    load() {                                         // idempotent: every page can await it
+        return this._p || (this._p = (async () => {
+            const { ok, data } = await get('/api/user/state');
+            if (ok) { this.likes = new Set(data.likes); this.favorites = new Set(data.favorites); this.watchlist = new Set(data.watchlist); }
+            this.loaded = true; this.emit({ loaded: true });
+        })());
+    },
+    has(kind, id) { return this[KINDS[kind].set].has(id); },
+    async toggle(kind, id) {
+        const k = KINDS[kind], key = kind + id;
+        if (this.pending.has(key)) return;           // no duplicate requests / duplicate preference updates
+        this.pending.add(key);
+        const set = this[k.set], was = set.has(id);
+        was ? set.delete(id) : set.add(id);           // optimistic
+        this.emit({ kind, id, optimistic: true });
+        const res = was ? await api(`${k.url}/${id}`, { method: 'DELETE' })
+                        : await api(k.url, { method: 'POST', body: { movie_id: id } });
+        const fine = res.ok || (!was && res.status === 409) || (was && res.status === 404);
+        if (!fine) {                                  // restore previous state and tell the user
+            was ? set.add(id) : set.delete(id);
+            toast(`Couldn’t update ${k.label.toLowerCase()}. Please try again.`, 'error');
+        } else if (kind === 'like') {
+            toast(was ? 'Like removed. Your picks will adjust.' : (res.data.taste_message || 'Liked. Your picks will adjust.'));
+        } else {
+            toast(was ? `Removed from ${k.label === 'Favorite' ? 'Favorites' : 'Watchlist'}.` : `Added to ${k.label === 'Favorite' ? 'Favorites' : 'Watchlist'}.`);
         }
-        document.querySelectorAll(`.heart[data-id="${id}"]`).forEach(h => {
-            h.setAttribute('aria-pressed', MM.favs.has(id));
-            h.setAttribute('aria-label', MM.favs.has(id) ? 'Remove from my list' : 'Add to my list');
-            h.innerHTML = icon('heart', MM.favs.has(id) ? 'i--fill' : '');
-            h.classList.remove('pop'); void h.offsetWidth; h.classList.add('pop');
-        });
-        document.dispatchEvent(new CustomEvent('taste:changed'));
-        return MM.favs.has(id);
-    } finally { if (btn) btn.disabled = false; }
+        this.pending.delete(key);
+        this.emit({ kind, id, done: true, changedTaste: kind === 'like' && fine });
+        return fine;
+    },
+};
+
+function actButton(kind, id, { large = false } = {}) {
+    const k = KINDS[kind], on = Store.has(kind, id);
+    const lbl = on ? k.on : k.off;
+    if (large) {
+        return `<button class="btn-act act--${kind}" data-act="${kind}" data-id="${id}" aria-pressed="${on}"><span class="ico">${icon(ICON[kind], on ? 'i--fill' : '')}</span><span class="txt">${esc(on ? k.on : k.off)}</span></button>`;
+    }
+    return `<button class="act act--${kind}" data-act="${kind}" data-id="${id}" aria-pressed="${on}" aria-label="${esc(lbl)}" title="${esc(lbl)}">${icon(ICON[kind], on ? 'i--fill' : '')}</button>`;
 }
 
-/* ---------- cards ---------- */
+function syncControls() {
+    document.querySelectorAll('[data-act]:not([data-static])').forEach((b) => {
+        const kind = b.dataset.act, id = +b.dataset.id, k = KINDS[kind], on = Store.has(kind, id);
+        if (b.getAttribute('aria-pressed') === String(on)) return;
+        b.setAttribute('aria-pressed', on);
+        const lbl = on ? k.on : k.off;
+        if (b.classList.contains('btn-act')) {
+            b.querySelector('.ico').innerHTML = icon(ICON[kind], on ? 'i--fill' : '');
+            b.querySelector('.txt').textContent = lbl;
+        } else {
+            b.setAttribute('aria-label', lbl); b.title = lbl; b.innerHTML = icon(ICON[kind], on ? 'i--fill' : '');
+            b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
+        }
+    });
+    const f = $('count-fav'), w = $('count-watch');
+    if (f) f.textContent = Store.favorites.size || '';
+    if (w) w.textContent = Store.watchlist.size || '';
+}
+
+document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    e.preventDefault();
+    Store.toggle(b.dataset.act, +b.dataset.id);
+});
+
+/* ---------- movie card (one component, used everywhere) ---------- */
 function posterHTML(m) {
     const fb = `<div class="poster-fallback">${esc(m.title)}</div>`;
     if (!m.poster_url) return fb;
-    return `<img src="${esc(m.poster_url)}" alt="" loading="lazy" onerror="this.outerHTML=this.dataset.fb" data-fb="${esc(fb)}">`;
+    return `<img src="${esc(m.poster_url)}" alt="" loading="lazy" decoding="async" data-fb="${esc(fb)}" onerror="this.outerHTML=this.dataset.fb">`;
+}
+const metaLine = (m) => [m.release_year, (m.genres || []).slice(0, 2).join(' · ')].filter(Boolean).join(' · ');
+
+function rememberWhy(m) {
+    if (!m.explanation) return;
+    try { sessionStorage.setItem('mm:why:' + m.movie_id, JSON.stringify({ text: m.explanation, detail: m.explanation_detail || null })); } catch (e) { /* storage unavailable */ }
 }
 
-function meterHTML(d) {
-    if (!d) return '';
-    const t = Math.max(0, Math.min(1, d.taste_match)) * 100;
-    const mo = Math.max(0, Math.min(0.3, d.mood_effect * 3)) * 100;
-    const sign = d.mood_effect >= 0 ? '+' : '−';
-    return `<div class="meter" role="img" aria-label="Taste match ${d.taste_match.toFixed(2)}, mood effect ${sign}${Math.abs(d.mood_effect).toFixed(2)}">
-              <span class="m-taste" style="width:${t}%"></span><span class="m-mood" style="width:${mo}%"></span></div>
-            <div class="meter-label mono"><span class="t">taste <b>${d.taste_match.toFixed(2)}</b></span><span class="m">mood <b>${sign}${Math.abs(d.mood_effect).toFixed(2)}</b></span></div>`;
-}
-
-function cardHTML(m, { rec = false, i = 0 } = {}) {
-    const fav = MM.favs.has(m.movie_id);
-    if (rec) MM.recs[m.movie_id] = m;
-    const meta = [m.release_year, (m.genres || []).slice(0, 2).join(' / '), m.vote_average ? m.vote_average.toFixed(1) : null].filter(Boolean).join(' · ');
-    return `<article class="card" style="--i:${i}">
-        <div class="media">
-            <button class="poster" data-open="${m.movie_id}" aria-label="Details: ${esc(m.title)}">${posterHTML(m)}</button>
-            <button class="heart" data-id="${m.movie_id}" aria-pressed="${fav}" aria-label="${fav ? 'Remove from my list' : 'Add to my list'}">${icon('heart', fav ? 'i--fill' : '')}</button>
+function cardHTML(m, { why = false, i = 0 } = {}) {
+    if (why) rememberWhy(m);
+    const href = `/movie/${m.movie_id}`;
+    return `<article class="card" style="--i:${Math.min(i, 12)}">
+        <a class="poster" href="${href}" tabindex="-1" aria-hidden="true">${posterHTML(m)}</a>
+        <div class="card-body">
+            <a class="card-title" href="${href}">${esc(m.title)}</a>
+            <span class="card-meta">${esc(metaLine(m))}</span>
+            ${why && m.explanation ? `<span class="card-why">${esc(m.explanation)}</span>` : ''}
         </div>
-        <div class="body" style="min-width:0">
-            <h3 class="title">${esc(m.title)}</h3>
-            <p class="sub mono">${esc(meta)}</p>
-            ${rec ? `<p class="overview">${esc(m.overview || '')}</p><p class="why">${esc(m.explanation || '')}</p>${meterHTML(m.explanation_detail)}` : ''}
-        </div>
+        <div class="actions">${actButton('like', m.movie_id)}${actButton('fav', m.movie_id)}${actButton('watch', m.movie_id)}<a class="more" href="${href}" aria-label="Details for ${esc(m.title)}">Details</a></div>
     </article>`;
 }
+const gridHTML = (movies, opts = {}) => movies.map((m, i) => cardHTML(m, { ...opts, i })).join('');
 
-function bindCards(root) {
-    root.addEventListener('click', e => {
-        const open = e.target.closest('[data-open]'), heart = e.target.closest('.heart');
-        if (heart) { e.stopPropagation(); toggleFav(+heart.dataset.id, heart); }
-        else if (open) openDetail(+open.dataset.open);
-    });
-}
+const skeleton = (n = 8) => Array.from({ length: n }, () => '<div class="skel-card" aria-hidden="true"><div class="skel"></div><i></i><i style="width:45%"></i></div>').join('');
+const emptyHTML = (title, text, link) => `<div class="empty"><h2>${esc(title)}</h2><p>${esc(text)}</p>${link ? `<a class="btn" href="${link.href}">${esc(link.label)}</a>` : ''}</div>`;
+const errorHTML = (msg = 'Something went wrong.', retry = 'location.reload()') => `<div class="empty" role="alert"><h2>That didn’t load</h2><p>${esc(msg)}</p><button class="btn btn--ghost" onclick="${retry}">Try again</button></div>`;
 
-/* ---------- detail dialog ---------- */
-async function openDetail(id) {
-    const dlg = document.getElementById('movie-dialog');
-    if (!dlg) return;
-    const { ok, data } = await json(`/api/movies/${id}`);
-    if (!ok) { toast('That film wouldn’t open. Try again.'); return; }
-    const m = data.movie, r = MM.recs[id];
-    const fav = MM.favs.has(id);
-    dlg.querySelector('.dlg').innerHTML = `
-        <div class="poster" style="cursor:default">${posterHTML(m)}</div>
-        <div>
-            <p class="eyebrow">${esc([m.release_year, m.runtime ? m.runtime + ' min' : null].filter(Boolean).join(' · '))}</p>
-            <h2 id="dlg-title">${esc(m.title)}</h2>
-            <p>${esc(m.overview || 'No synopsis on file.')}</p>
-            <dl>
-                <dt>Genres</dt><dd>${esc((m.genres || []).join(', ') || '—')}</dd>
-                <dt>Director</dt><dd>${esc(m.director || '—')}</dd>
-                <dt>Cast</dt><dd>${esc((m.cast || []).slice(0, 5).join(', ') || '—')}</dd>
-                <dt>Rating</dt><dd class="mono">${m.vote_average ? m.vote_average.toFixed(1) + ' / 10' : '—'}</dd>
-            </dl>
-            ${r ? `<div class="why-box"><p class="eyebrow">Why this one</p><p class="why" style="font-size:1rem">${esc(r.explanation)}</p>${meterHTML(r.explanation_detail)}</div>` : ''}
-            <div class="dlg-actions">
-                <button class="btn ${fav ? 'btn--ghost' : ''}" id="dlg-fav" data-id="${id}">${icon('heart', fav ? 'i--fill' : '')} ${fav ? 'On your list' : 'Add to my list'}</button>
-                <button class="btn btn--ghost" id="dlg-close">Close</button>
-            </div>
-        </div>`;
-    dlg.querySelector('#dlg-close').onclick = () => dlg.close();
-    dlg.querySelector('#dlg-fav').onclick = async function () {
-        const now = await toggleFav(id, this);
-        this.className = 'btn' + (now ? ' btn--ghost' : '');
-        this.innerHTML = `${icon('heart', now ? 'i--fill' : '')} ${now ? 'On your list' : 'Add to my list'}`;
-    };
-    dlg.showModal();
-}
-
+/* ---------- header: search, profile menu, active nav ---------- */
 document.addEventListener('DOMContentLoaded', () => {
-    const dlg = document.getElementById('movie-dialog');
-    if (!dlg) return;
-    dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
-    dlg.querySelector('.dlg-x').addEventListener('click', () => dlg.close());
+    const here = location.pathname;
+    document.querySelectorAll('.nav a, .tabbar a').forEach((a) => {
+        const h = a.getAttribute('href');
+        if (h === here || (h === '/dashboard' && here === '/discover') || (h === '/browse' && here.startsWith('/movie/') && false)) a.setAttribute('aria-current', 'page');
+    });
+    const btn = $('user-btn'), menu = $('user-menu');
+    if (btn && menu) {
+        btn.addEventListener('click', (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; btn.setAttribute('aria-expanded', String(!menu.hidden)); });
+        document.addEventListener('click', () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); btn.focus(); } });
+    }
+    const out = $('logout-btn');
+    if (out) out.addEventListener('click', async (e) => { e.preventDefault(); await api('/api/auth/logout', { method: 'POST' }); location.href = '/'; });
+    if (document.body.dataset.auth === '1') Store.load();
 });
 
-/* ---------- vibe map (the idea in one picture) ---------- */
-function drawVibe(svg, { lam = 0.3, mood = null, label = true } = {}) {
-    const W = 280, H = 150, NS = 'http://www.w3.org/2000/svg';
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    if (!svg.dataset.built) {
-        svg.dataset.built = 1;
-        let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
-        const blobs = [[60, 96, 'heist'], [118, 44, 'mystery'], [196, 110, 'romance'], [232, 40, 'horror'], [150, 124, 'drama']];
-        let dots = '';
-        blobs.forEach(([cx, cy]) => { for (let i = 0; i < 26; i++) { const a = rnd() * 6.28, r = Math.abs((rnd() + rnd() - 1)) * 26; dots += `<circle cx="${(cx + r * Math.cos(a)).toFixed(1)}" cy="${(cy + r * Math.sin(a) * .8).toFixed(1)}" r="1.5"/>`; } });
-        svg.innerHTML = `<g class="dotfield">${dots}</g>
-            <line class="path" x1="60" y1="96" x2="232" y2="40" stroke="#B8381A" stroke-width="1.2" stroke-dasharray="3 3"/>
-            <circle class="target" cx="232" cy="40" r="11" fill="none" stroke="#B8381A" stroke-width="1.6"/>
-            <circle cx="60" cy="96" r="5" fill="#0E6660"/>
-            <circle class="pos" cx="60" cy="96" r="4" fill="#F3EEE3" stroke="currentColor" stroke-width="2"/>
-            <text class="t-taste" x="60" y="116" text-anchor="middle" fill="#0E6660">your taste</text>
-            <text class="t-mood" x="232" y="68" text-anchor="middle" fill="#B8381A">mood</text>`;
-    }
-    const x = 60 + (232 - 60) * lam, y = 96 + (40 - 96) * lam;
-    const pos = svg.querySelector('.pos');
-    pos.setAttribute('cx', x); pos.setAttribute('cy', y);
-    const on = !!mood;
-    svg.querySelector('.path').style.opacity = on ? 1 : .15;
-    svg.querySelector('.target').style.opacity = on ? 1 : .15;
-    svg.querySelector('.t-mood').textContent = on ? mood : 'no mood';
-    svg.querySelector('.t-mood').style.opacity = on ? 1 : .4;
-    if (!on) { pos.setAttribute('cx', 60); pos.setAttribute('cy', 96); }
-}
+/* ---------- scroll-driven botanical background ----------
+   Moves briefly while the page scrolls, then eases back to rest and STOPS (no idle animation).
+   Only CSS custom properties on <html> change; layers use transform. */
+(function botanical() {
+    const root = document.documentElement;
+    if (!document.querySelector('.bg')) return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const touch = matchMedia('(pointer: coarse)').matches;
+    const SCALE = touch ? 0.5 : 1;
+    const MAIN = 16 * SCALE, LEAF = 9 * SCALE;
+    let lastY = window.scrollY, target = 0, cur = 0, raf = 0, idle = 0;
 
-function lambdaWords(v, mood) {
-    const m = mood || 'mood';
-    if (!mood) return 'Only what you already love';
-    if (v === 0) return 'Pure taste. Mood ignored';
-    if (v <= 0.15) return `A whisper of ${m}`;
-    if (v <= 0.4) return `A gentle nudge toward ${m}`;
-    if (v <= 0.7) return `Pushing out toward ${m}`;
-    if (v < 1) return `Mostly ${m}, a little you`;
-    return `All ${m}. Your history is ignored`;
-}
+    function apply(v) {
+        const n = v / MAIN;                                   // -1 … 1
+        root.style.setProperty('--by', (-v).toFixed(2) + 'px');
+        root.style.setProperty('--bx', (v * 0.35).toFixed(2) + 'px');
+        root.style.setProperty('--br', (n * 0.35).toFixed(3) + 'deg');
+        root.style.setProperty('--fy', (-n * LEAF).toFixed(2) + 'px');
+        root.style.setProperty('--fx', (n * LEAF * 0.7).toFixed(2) + 'px');
+        root.style.setProperty('--fr', (n * 1.1).toFixed(3) + 'deg');
+        root.style.setProperty('--cy', (n * 5 * SCALE).toFixed(2) + 'px');
+        root.style.setProperty('--cx', (-n * 3 * SCALE).toFixed(2) + 'px');
+    }
+    function tick() {
+        cur += (target - cur) * 0.14;                          // ease toward target
+        if (target === 0 && Math.abs(cur) < 0.04) { cur = 0; apply(0); raf = 0; return; }   // settled: stop the loop
+        apply(cur);
+        raf = requestAnimationFrame(tick);
+    }
+    function onScroll() {
+        const dy = window.scrollY - lastY; lastY = window.scrollY;
+        target = Math.max(-MAIN, Math.min(MAIN, target + dy * 0.05));
+        clearTimeout(idle);
+        idle = setTimeout(() => { target = 0; if (!raf) raf = requestAnimationFrame(tick); }, 120);   // scrolling stopped → settle
+        if (!raf) raf = requestAnimationFrame(tick);
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('pagehide', () => { window.removeEventListener('scroll', onScroll); cancelAnimationFrame(raf); clearTimeout(idle); });
+})();
