@@ -59,3 +59,25 @@ build/
 *.bak
 tmp/
 temp/
+
+# Auto-added by Nuvai session-start-governance-check
+.nuvai/reports
+.nuvai/local/
+.mypy_cache/
+.ruff_cache/
+.nuvai/active-context.yaml
+.nuvai/active-prompts/
+.nuvai/debug/
+.nuvai/bug-rc/
+.nuvai/agent-progress/
+.nuvai/issues.jsonl
+.nuvai/discussions.jsonl
+.nuvai/reviews/
+.nuvai/audits
+
+# Report / paper / presentation work and the scripts used to build them
+.nuvai/
+docs/report/
+docs/paper/
+docs/presentation/
+scripts/e2e_browser.py
